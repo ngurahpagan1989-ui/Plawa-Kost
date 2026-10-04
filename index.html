@@ -13,6 +13,32 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Supabase JS Client v2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <style>
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #invoice-printable, #invoice-printable * {
+        visibility: visible;
+      }
+      #invoice-printable {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 24px;
+        background: white !important;
+        color: black !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
 </head>
 <body class="bg-slate-950 text-slate-200 antialiased font-sans">
   <div id="root"></div>
@@ -37,6 +63,7 @@
       const [isAddTenantOpen, setIsAddTenantOpen] = useState(false);
       const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
       const [selectedBillForUtility, setSelectedBillForUtility] = useState(null);
+      const [selectedBillForInvoice, setSelectedBillForInvoice] = useState(null);
 
       const loadAllData = async () => {
         setLoading(true);
@@ -66,14 +93,14 @@
       const navItems = [
         { id: 'rooms', label: 'Denah Kamar', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
         { id: 'tenants', label: 'Penyewa', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-        { id: 'billing', label: 'Tagihan & Utilitas', icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z' },
+        { id: 'billing', label: 'Tagihan & Invoice', icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z' },
         { id: 'expenses', label: 'Kas Pengeluaran', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' }
       ];
 
       return (
         <div className="min-h-screen flex flex-col md:flex-row bg-slate-950 text-slate-300">
           {/* SIDEBAR */}
-          <aside className="w-full md:w-64 bg-slate-900/90 border-b md:border-b-0 md:border-r border-slate-800/80 p-5 flex flex-col shrink-0">
+          <aside className="w-full md:w-64 bg-slate-900/90 border-b md:border-b-0 md:border-r border-slate-800/80 p-5 flex flex-col shrink-0 no-print">
             <div className="flex items-center gap-3 mb-8">
               <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-lg">
                 P
@@ -139,6 +166,7 @@
                     tenants={tenants} 
                     rooms={rooms} 
                     onOpenUtility={(bill) => setSelectedBillForUtility(bill)} 
+                    onOpenInvoice={(bill) => setSelectedBillForInvoice(bill)}
                     refresh={loadAllData}
                   />
                 )}
@@ -175,6 +203,14 @@
               refresh={loadAllData} 
             />
           )}
+          {selectedBillForInvoice && (
+            <InvoiceModal
+              bill={selectedBillForInvoice}
+              tenant={tenants.find(t => t.id === selectedBillForInvoice.tenant_id)}
+              room={rooms.find(r => r.id === selectedBillForInvoice.room_id)}
+              onClose={() => setSelectedBillForInvoice(null)}
+            />
+          )}
         </div>
       );
     }
@@ -184,8 +220,6 @@
       const total = rooms.length;
       const occupied = rooms.filter(r => r.status === 'occupied').length;
       const rate = total > 0 ? Math.round((occupied / total) * 100) : 0;
-      
-      // Hitung total orang yang tinggal di kost
       const totalOccupants = tenants.reduce((acc, curr) => acc + (curr.occupant_count || 1), 0);
 
       return (
@@ -359,8 +393,8 @@
       );
     }
 
-    // 3. TAB TAGIHAN & UTILITAS (SPLIT LISTRIK PER KAMAR & AIR PER ORANG)
-    function BillingView({ bills, tenants, rooms, onOpenUtility, refresh }) {
+    // 3. TAB TAGIHAN & INVOICE
+    function BillingView({ bills, tenants, rooms, onOpenUtility, onOpenInvoice, refresh }) {
       const [generating, setGenerating] = useState(false);
 
       const markPaid = async (billId) => {
@@ -379,7 +413,7 @@
         const today = new Date();
         const nextMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
         
-        if (!confirm(`Terbitkan tagihan baru untuk semua penghuni aktif untuk periode ${nextMonth}?`)) return;
+        if (!confirm(`Terbitkan tagihan baru untuk semua penghuni aktif periode ${nextMonth}?`)) return;
 
         setGenerating(true);
         try {
@@ -425,7 +459,7 @@
         }
         msg += `------------------------------------\n`;
         msg += `*TOTAL TAGIHAN: Rp ${total.toLocaleString('id-ID')}*\n\n`;
-        msg += `Mohon konfirmasi dan kirimkan bukti transfer jika sudah melakukan pembayaran ya kak. Terima kasih! 🙏`;
+        msg += `Pembayaran dapat ditransfer ke rekening BCA pengelola.\nMohon kirimkan konfirmasi bukti transfer jika sudah melakukan pembayaran ya kak. Terima kasih! 🙏`;
 
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
       };
@@ -434,8 +468,8 @@
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
-              <h2 className="text-lg font-bold text-slate-100">Tagihan & Utilitas</h2>
-              <p className="text-xs text-slate-400">Listrik dibagi per kamar • Air dihitung per kepala/orang</p>
+              <h2 className="text-lg font-bold text-slate-100">Tagihan & Invoice Sewa</h2>
+              <p className="text-xs text-slate-400">Kelola rincian meteran dan cetak nota faktur resmi</p>
             </div>
             <button
               onClick={handleGenerateMonthlyBills}
@@ -454,10 +488,10 @@
                     <th className="px-4 py-3">Kamar</th>
                     <th className="px-4 py-3">Penyewa</th>
                     <th className="px-4 py-3">Sewa Pokok</th>
-                    <th className="px-4 py-3">Rincian Listrik & Air</th>
+                    <th className="px-4 py-3">Listrik & Air</th>
                     <th className="px-4 py-3">Total Tagihan</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Aksi</th>
+                    <th className="px-4 py-3 text-right">Aksi & Faktur</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -495,6 +529,16 @@
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right space-x-1 whitespace-nowrap">
+                          {/* Tombol Buka Invoice */}
+                          <button
+                            onClick={() => onOpenInvoice(b)}
+                            title="Buka Nota Faktur"
+                            className="text-[11px] font-semibold text-purple-300 bg-purple-950/50 border border-purple-800/50 px-2 py-1 rounded-lg hover:bg-purple-900/60 transition"
+                          >
+                            Invoice
+                          </button>
+
+                          {/* Tombol WhatsApp */}
                           <button
                             onClick={() => sendWhatsAppInvoice(b, tenant, room)}
                             title="Kirim ke WhatsApp"
@@ -672,32 +716,184 @@
       );
     }
 
+    // MODAL INVOICE RESMI (NOTA FAKTUR DIGITAL SIAP CETAK)
+    function InvoiceModal({ bill, tenant, room, onClose }) {
+      if (!bill) return null;
+
+      const total = Number(bill.rent_amount) + Number(bill.utility_cost || 0);
+      const isPaid = bill.payment_status === 'paid';
+      const isDouble = tenant && (tenant.occupant_count || 1) > 1;
+
+      // Format Nomor Invoice (contoh: INV-202610-A)
+      const invoiceNumber = `INV-${bill.billing_month.replace(/-/g, '').substring(0, 6)}-${room?.room_number || 'X'}`;
+
+      const handlePrint = () => {
+        window.print();
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="relative max-w-xl w-full my-6">
+            {/* Tombol Aksi di Atas (Tidak ikut tercetak) */}
+            <div className="flex justify-between items-center mb-3 no-print">
+              <span className="text-xs text-slate-400">Pratinjau Nota Invoice</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrint}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 transition"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                  </svg>
+                  Cetak / Simpan PDF
+                </button>
+                <button
+                  onClick={onClose}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+
+            {/* LEMBAR KERTAS INVOICE (PUTIH BERSIH) */}
+            <div id="invoice-printable" className="bg-white text-slate-900 rounded-3xl p-8 sm:p-10 shadow-2xl border border-slate-200">
+              {/* Header Invoice */}
+              <div className="flex justify-between items-start border-b border-slate-200 pb-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-7 h-7 bg-emerald-600 text-white font-black rounded-lg flex items-center justify-center text-sm">
+                      P
+                    </div>
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">PLAWA KOST</h2>
+                  </div>
+                  <p className="text-xs text-slate-500">Jl. Plawa, Denpasar, Bali</p>
+                  <p className="text-xs text-slate-500">WhatsApp Pengelola: 0812-XXXX-XXXX</p>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-xs font-extrabold text-emerald-600 uppercase tracking-widest">INVOICE SEWA</span>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{invoiceNumber}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Periode: {bill.billing_month}</p>
+                </div>
+              </div>
+
+              {/* Info Penghuni & Status Cap */}
+              <div className="grid grid-cols-2 gap-4 py-6 border-b border-slate-100 text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ditagihkan Kepada</span>
+                  <p className="text-sm font-bold text-slate-900">{tenant?.full_name || '-'}</p>
+                  <p className="text-slate-600 mt-0.5">Kamar {room?.room_number} • {isDouble ? 'Double (2 Orang)' : 'Single (1 Orang)'}</p>
+                  <p className="text-slate-500 mt-0.5">{tenant?.phone || '-'}</p>
+                </div>
+
+                <div className="flex flex-col items-end justify-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Status Pembayaran</span>
+                  <div className={`text-center px-4 py-1.5 rounded-xl border-2 font-black text-xs tracking-wider uppercase ${
+                    isPaid 
+                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50' 
+                      : 'border-rose-500 text-rose-600 bg-rose-50'
+                  }`}>
+                    {isPaid ? 'LUNAS' : 'BELUM DIBAYAR'}
+                  </div>
+                  {isPaid && bill.paid_at && (
+                    <span className="text-[10px] text-slate-400 mt-1">
+                      Tgl: {new Date(bill.paid_at).toLocaleDateString('id-ID')}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Tabel Rincian */}
+              <div className="py-6">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3">Keterangan Biaya</th>
+                      <th className="pb-3 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    <tr>
+                      <td className="py-3">
+                        <p className="font-bold text-slate-800">Sewa Pokok Kamar {room?.room_number}</p>
+                        <p className="text-[11px] text-slate-500">Sewa bulanan unit kost</p>
+                      </td>
+                      <td className="py-3 text-right font-semibold text-slate-800">
+                        Rp {Number(bill.rent_amount).toLocaleString('id-ID')}
+                      </td>
+                    </tr>
+
+                    {bill.utility_cost > 0 && (
+                      <tr>
+                        <td className="py-3">
+                          <p className="font-bold text-slate-800">Biaya Utilitas (Listrik & Air)</p>
+                          <p className="text-[11px] text-slate-500 italic leading-relaxed">
+                            {bill.notes || 'Biaya meteran listrik dan iuran air'}
+                          </p>
+                        </td>
+                        <td className="py-3 text-right font-semibold text-slate-800">
+                          Rp {Number(bill.utility_cost).toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-900 text-sm">
+                      <th className="pt-4 font-black text-slate-900 uppercase">Total Tagihan</th>
+                      <th className="pt-4 text-right font-black text-emerald-600 text-base">
+                        Rp {total.toLocaleString('id-ID')}
+                      </th>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Petunjuk Pembayaran & Catatan */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs space-y-1 mt-2">
+                <p className="font-bold text-slate-800">Instruksi Pembayaran:</p>
+                <p className="text-slate-600">• Bank BCA: <span className="font-bold text-slate-800">1234-567-890</span> a/n Pengelola Plawa Kost</p>
+                <p className="text-slate-600">• Harap simpan dan kirimkan bukti transfer ke nomor WhatsApp pengelola setelah pembayaran.</p>
+              </div>
+
+              {/* Footer Tanda Tangan */}
+              <div className="mt-8 pt-4 flex justify-between items-end text-xs text-slate-400">
+                <div>
+                  <p>Terima kasih atas kerjasamanya.</p>
+                  <p className="text-[10px]">Dicetak secara otomatis melalui Plawa Kost System</p>
+                </div>
+                <div className="text-center w-36">
+                  <div className="h-12"></div>
+                  <p className="font-bold text-slate-800 border-t border-slate-300 pt-1">Pengelola Kost</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // MODAL UTILITAS: LOGIKA LISTRIK PER KAMAR + AIR PER KEPALA
     function UtilityModal({ bill, tenant, room, onClose, refresh }) {
-      // 1. Listrik (Per Kamar)
-      const [electricMode, setElectricMode] = useState('meter'); // 'meter' | 'flat' | 'none'
+      const [electricMode, setElectricMode] = useState('meter');
       const [elPrev, setElPrev] = useState(0);
       const [elCurr, setElCurr] = useState(0);
       const [elRate, setElRate] = useState(2500);
       const [elFlatPrice, setElFlatPrice] = useState(100000);
 
-      // 2. Air (Per Kepala / Orang)
       const initialPeople = tenant?.occupant_count || 1;
       const [peopleCount, setPeopleCount] = useState(initialPeople);
-      const [waterRatePerPerson, setWaterRatePerPerson] = useState(30000); // Rp 30.000 / orang
+      const [waterRatePerPerson, setWaterRatePerPerson] = useState(30000);
       const [includeWater, setIncludeWater] = useState(true);
 
       const [saving, setSaving] = useState(false);
 
-      // Perhitungan Listrik Per Kamar
       const elUsage = Math.max(0, elCurr - elPrev);
       const elCost = electricMode === 'meter' 
         ? (elUsage * elRate) 
         : (electricMode === 'flat' ? Number(elFlatPrice) : 0);
 
-      // Perhitungan Air Per Orang
       const waterTotalCost = includeWater ? (Number(peopleCount) * Number(waterRatePerPerson)) : 0;
-
       const totalUtility = elCost + waterTotalCost;
 
       const handleSave = async (e) => {
@@ -706,13 +902,13 @@
         try {
           const breakdown = [];
           if (electricMode === 'meter' && elCost > 0) {
-            breakdown.push(`Listrik (Kamar): ${elUsage} kWh @Rp${elRate} = Rp ${elCost.toLocaleString('id-ID')}`);
+            breakdown.push(`Listrik: ${elUsage} kWh @Rp${elRate} = Rp ${elCost.toLocaleString('id-ID')}`);
           } else if (electricMode === 'flat' && elCost > 0) {
-            breakdown.push(`Listrik (Kamar): Flat Rp ${elCost.toLocaleString('id-ID')}`);
+            breakdown.push(`Listrik: Flat Rp ${elCost.toLocaleString('id-ID')}`);
           }
 
           if (includeWater && waterTotalCost > 0) {
-            breakdown.push(`Air: ${peopleCount} Orang @Rp${Number(waterRatePerPerson).toLocaleString('id-ID')} = Rp ${waterTotalCost.toLocaleString('id-ID')}`);
+            breakdown.push(`Air: ${peopleCount} Jiwa @Rp${Number(waterRatePerPerson).toLocaleString('id-ID')} = Rp ${waterTotalCost.toLocaleString('id-ID')}`);
           }
 
           const notesString = breakdown.join(' | ') || 'Tanpa biaya tambahan';
@@ -749,7 +945,7 @@
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              {/* BAGIAN LISTRIK (PER KAMAR) */}
+              {/* LISTRIK */}
               <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2.5">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
@@ -817,7 +1013,7 @@
                 )}
               </div>
 
-              {/* BAGIAN AIR (PER ORANG) */}
+              {/* AIR */}
               <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2.5">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold text-teal-400 flex items-center gap-1.5">
@@ -968,12 +1164,12 @@
       );
     }
 
-    // MODAL CHECK-IN (DENGAN PILIHAN SINGLE / DOUBLE)
+    // MODAL CHECK-IN
     function AddTenantModal({ rooms, onClose, refresh }) {
       const [roomId, setRoomId] = useState(rooms[0]?.id || '');
       const [fullName, setFullName] = useState('');
       const [phone, setPhone] = useState('');
-      const [occupantCount, setOccupantCount] = useState(1); // 1 = Single, 2 = Double
+      const [occupantCount, setOccupantCount] = useState(1);
       const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
       const [dueDay, setDueDay] = useState(new Date().getDate());
       const [saving, setSaving] = useState(false);
@@ -1042,7 +1238,7 @@
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-400 block mb-1">Tipe Hunian (Kapasitas)</label>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Tipe Hunian</label>
                 <select
                   value={occupantCount}
                   onChange={(e) => setOccupantCount(Number(e.target.value))}
