@@ -4,103 +4,847 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Plawa Kost Management</title>
-  <!-- Tailwind CSS -->
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React & ReactDOM -->
+  <!-- React & ReactDOM CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Babel untuk compile JSX langsung di browser -->
+  <!-- Babel Standalone (Compiler JSX di browser) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Supabase JS Client -->
+  <!-- Supabase JS Client v2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-50 text-slate-800">
+<body class="bg-slate-50 text-slate-800 antialiased font-sans">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // Masukkan kredensial Supabase kamu di sini
+    // Inisialisasi Supabase Client
     const SUPABASE_URL = 'https://oqqrarwwbhxdpocaerog.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcXJhcnd3Ymh4ZHBvY2Flcm9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDI1NDksImV4cCI6MjEwNjY3ODU0OX0.XHVPjy01DZHo5uKhGZyClA-Jr6nKeqQi4FajatbSZKI';
-
-// Di browser (window.supabase):
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcXJhcnd3Ymh4ZHBvY2Flcm9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDI1NDksImV4cCI6MjEwNjY3ODU0OX0.XHVPjy01DZHo5uKhGZyClA-Jr6nKeqQi4FajatbSZKI';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     function App() {
-      const [tab, setTab] = useState('rooms');
+      const [activeTab, setActiveTab] = useState('rooms');
       const [rooms, setRooms] = useState([]);
+      const [tenants, setTenants] = useState([]);
+      const [bills, setBills] = useState([]);
+      const [expenses, setExpenses] = useState([]);
       const [loading, setLoading] = useState(true);
 
+      // Modal States
+      const [isAddTenantOpen, setIsAddTenantOpen] = useState(false);
+      const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
+      const [selectedBillForUtility, setSelectedBillForUtility] = useState(null);
+
+      // Fetch Semua Data
+      const loadAllData = async () => {
+        setLoading(true);
+        try {
+          const [roomsRes, tenantsRes, billsRes, expensesRes] = await Promise.all([
+            db.from('rooms').select('*').order('room_number'),
+            db.from('tenants').select('*').eq('is_active', true).order('created_at', { ascending: false }),
+            db.from('bills').select('*').order('created_at', { ascending: false }),
+            db.from('expenses').select('*').order('expense_date', { ascending: false })
+          ]);
+
+          if (roomsRes.data) setRooms(roomsRes.data);
+          if (tenantsRes.data) setTenants(tenantsRes.data);
+          if (billsRes.data) setBills(billsRes.data);
+          if (expensesRes.data) setExpenses(expensesRes.data);
+        } catch (err) {
+          console.error("Gagal memuat data:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
       useEffect(() => {
-        fetchRooms();
+        loadAllData();
       }, []);
 
-      async function fetchRooms() {
-        setLoading(true);
-        const { data, error } = await supabase.from('rooms').select('*').order('room_number');
-        if (!error && data) setRooms(data);
-        setLoading(false);
-      }
+      // Hitung ringkasan kamar
+      const totalRooms = rooms.length;
+      const occupiedRooms = rooms.filter(r => r.status === 'occupied').length;
+      const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
 
       return (
-        <div className="min-h-screen">
-          <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10">
-            <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-              <h1 className="text-xl font-bold text-slate-900">Plawa Kost Management</h1>
-              <nav className="flex space-x-1 bg-slate-100 p-1 rounded-xl">
-                {['rooms', 'tenants', 'billing', 'expenses'].map((t) => (
+        <div className="min-h-screen flex flex-col">
+          {/* Header & Navigasi */}
+          <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
+            <div className="max-w-6xl mx-auto px-4 py-3 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black shadow-md shadow-blue-500/20">
+                  P
+                </div>
+                <div>
+                  <h1 className="text-base font-bold text-slate-900 leading-tight">Plawa Kost</h1>
+                  <p className="text-xs text-slate-500">Property Management</p>
+                </div>
+              </div>
+
+              <nav className="flex space-x-1 bg-slate-100 p-1.5 rounded-xl text-xs font-semibold">
+                {[
+                  { id: 'rooms', label: 'Denah Kamar' },
+                  { id: 'tenants', label: 'Penyewa' },
+                  { id: 'billing', label: 'Tagihan' },
+                  { id: 'expenses', label: 'Kas Keluar' }
+                ].map((item) => (
                   <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
-                      tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      activeTab === item.id
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {t === 'rooms' ? 'Denah Kamar' : t === 'tenants' ? 'Penyewa' : t === 'billing' ? 'Tagihan' : 'Pengeluaran'}
+                    {item.label}
                   </button>
                 ))}
               </nav>
             </div>
           </header>
 
-          <main className="max-w-6xl mx-auto p-6">
-            {tab === 'rooms' && (
-              <div>
-                <h2 className="text-lg font-semibold mb-4">Daftar Kamar ({rooms.length})</h2>
-                {loading ? (
-                  <p className="text-slate-500">Memuat data kamar...</p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    {rooms.map((room) => (
-                      <div key={room.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xl font-bold">Kamar {room.room_number}</span>
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                            room.status === 'occupied' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {room.status === 'occupied' ? 'Terisi' : 'Kosong'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-600">Rp {Number(room.monthly_price).toLocaleString('id-ID')} / bulan</p>
-                      </div>
-                    ))}
-                    {rooms.length === 0 && <p className="text-slate-400">Belum ada data kamar di database.</p>}
-                  </div>
+          {/* Konten Utama */}
+          <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-24 text-slate-400 text-sm">
+                Menghubungkan ke Supabase...
+              </div>
+            ) : (
+              <>
+                {activeTab === 'rooms' && (
+                  <RoomsView 
+                    rooms={rooms} 
+                    tenants={tenants} 
+                    totalRooms={totalRooms} 
+                    occupiedRooms={occupiedRooms} 
+                    occupancyRate={occupancyRate} 
+                    onOpenAddRoom={() => setIsAddRoomOpen(true)}
+                  />
                 )}
-              </div>
-            )}
-            {tab !== 'rooms' && (
-              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-500">
-                Fitur {tab} siap dihubungkan.
-              </div>
+                {activeTab === 'tenants' && (
+                  <TenantsView 
+                    tenants={tenants} 
+                    rooms={rooms} 
+                    onOpenCheckIn={() => setIsAddTenantOpen(true)} 
+                    refresh={loadAllData}
+                  />
+                )}
+                {activeTab === 'billing' && (
+                  <BillingView 
+                    bills={bills} 
+                    tenants={tenants} 
+                    rooms={rooms} 
+                    onOpenUtility={(bill) => setSelectedBillForUtility(bill)} 
+                    refresh={loadAllData}
+                  />
+                )}
+                {activeTab === 'expenses' && (
+                  <ExpensesView 
+                    expenses={expenses} 
+                    refresh={loadAllData}
+                  />
+                )}
+              </>
             )}
           </main>
+
+          {/* Modals */}
+          {isAddRoomOpen && (
+            <AddRoomModal 
+              onClose={() => setIsAddRoomOpen(false)} 
+              refresh={loadAllData} 
+            />
+          )}
+          {isAddTenantOpen && (
+            <AddTenantModal 
+              rooms={rooms.filter(r => r.status === 'empty')} 
+              onClose={() => setIsAddTenantOpen(false)} 
+              refresh={loadAllData} 
+            />
+          )}
+          {selectedBillForUtility && (
+            <UtilityModal 
+              bill={selectedBillForUtility} 
+              onClose={() => setSelectedBillForUtility(null)} 
+              refresh={loadAllData} 
+            />
+          )}
         </div>
       );
     }
 
+    // TAB 1: DENAH KAMAR
+    function RoomsView({ rooms, tenants, totalRooms, occupiedRooms, occupancyRate, onOpenAddRoom }) {
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200">
+              <span className="text-xs text-slate-500 font-medium">Total Unit</span>
+              <p className="text-xl font-bold text-slate-900 mt-0.5">{totalRooms}</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200">
+              <span className="text-xs text-slate-500 font-medium">Terisi</span>
+              <p className="text-xl font-bold text-blue-600 mt-0.5">{occupiedRooms}</p>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200">
+              <span className="text-xs text-slate-500 font-medium">Okupansi</span>
+              <p className="text-xl font-bold text-emerald-600 mt-0.5">{occupancyRate}%</p>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center">
+            <h2 className="text-base font-bold text-slate-900">Daftar Kamar</h2>
+            <button
+              onClick={onOpenAddRoom}
+              className="bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-slate-800 transition"
+            >
+              + Tambah Unit
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {rooms.map((room) => {
+              const activeTenant = tenants.find(t => t.room_id === room.id);
+              const isOccupied = room.status === 'occupied';
+
+              return (
+                <div key={room.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between h-44">
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-2xl font-black text-slate-900">{room.room_number}</span>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        isOccupied ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
+                      }`}>
+                        {isOccupied ? 'Terisi' : 'Kosong'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Rp {Number(room.monthly_price).toLocaleString('id-ID')} / bln
+                    </p>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-3">
+                    {isOccupied && activeTenant ? (
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-medium">Penghuni</p>
+                        <p className="text-xs font-bold text-slate-800 truncate">{activeTenant.full_name}</p>
+                        <p className="text-[10px] text-slate-500">Jatuh Tempo: Tgl {activeTenant.due_day}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">Siap disewakan</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {rooms.length === 0 && (
+              <div className="col-span-full py-12 text-center text-slate-400 text-sm">
+                Belum ada data kamar. Klik tombol "+ Tambah Unit" untuk membuat kamar baru.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // TAB 2: PENYEWA
+    function TenantsView({ tenants, rooms, onOpenCheckIn, refresh }) {
+      const handleCheckout = async (tenant) => {
+        if (!confirm(`Konfirmasi checkout untuk ${tenant.full_name}? Kamar akan berstatus kosong.`)) return;
+        try {
+          await db.from('tenants').update({ is_active: false }).eq('id', tenant.id);
+          if (tenant.room_id) {
+            await db.from('rooms').update({ status: 'empty' }).eq('id', tenant.room_id);
+          }
+          refresh();
+        } catch (err) {
+          alert('Gagal checkout: ' + err.message);
+        }
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-base font-bold text-slate-900">Penyewa Aktif ({tenants.length})</h2>
+            <button
+              onClick={onOpenCheckIn}
+              className="bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-blue-700 transition"
+            >
+              + Check-In Penyewa
+            </button>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-600 uppercase font-bold text-[10px]">
+                <tr>
+                  <th className="px-4 py-3">Unit</th>
+                  <th className="px-4 py-3">Nama</th>
+                  <th className="px-4 py-3">WhatsApp</th>
+                  <th className="px-4 py-3">Masuk</th>
+                  <th className="px-4 py-3">Jatuh Tempo</th>
+                  <th className="px-4 py-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {tenants.map((t) => {
+                  const room = rooms.find(r => r.id === t.room_id);
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-900">{room?.room_number || '-'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{t.full_name}</td>
+                      <td className="px-4 py-3 text-slate-600">{t.phone}</td>
+                      <td className="px-4 py-3 text-slate-500">{t.entry_date}</td>
+                      <td className="px-4 py-3 text-slate-600">Tiap tgl {t.due_day}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleCheckout(t)}
+                          className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-lg hover:bg-rose-100"
+                        >
+                          Checkout
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {tenants.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="text-center py-8 text-slate-400">Belum ada penyewa aktif.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // TAB 3: TAGIHAN
+    function BillingView({ bills, tenants, rooms, onOpenUtility, refresh }) {
+      const markPaid = async (billId) => {
+        try {
+          await db.from('bills').update({
+            payment_status: 'paid',
+            paid_at: new Date().toISOString()
+          }).eq('id', billId);
+          refresh();
+        } catch (err) {
+          alert('Gagal update status: ' + err.message);
+        }
+      };
+
+      return (
+        <div className="space-y-4">
+          <h2 className="text-base font-bold text-slate-900">Arus Tagihan & Kas Masuk</h2>
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-600 uppercase font-bold text-[10px]">
+                <tr>
+                  <th className="px-4 py-3">Unit</th>
+                  <th className="px-4 py-3">Penyewa</th>
+                  <th className="px-4 py-3">Sewa Pokok</th>
+                  <th className="px-4 py-3">Utilitas/Listrik</th>
+                  <th className="px-4 py-3">Total Tagihan</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {bills.map((b) => {
+                  const room = rooms.find(r => r.id === b.room_id);
+                  const tenant = tenants.find(t => t.id === b.tenant_id);
+                  const isPaid = b.payment_status === 'paid';
+
+                  return (
+                    <tr key={b.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-900">{room?.room_number || '-'}</td>
+                      <td className="px-4 py-3 text-slate-800">{tenant?.full_name || '-'}</td>
+                      <td className="px-4 py-3 text-slate-600">Rp {Number(b.rent_amount).toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-slate-600">Rp {Number(b.utility_cost || 0).toLocaleString('id-ID')}</span>
+                        {b.notes && <p className="text-[10px] text-slate-400">{b.notes}</p>}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-slate-900">
+                        Rp {Number(Number(b.rent_amount) + Number(b.utility_cost || 0)).toLocaleString('id-ID')}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          isPaid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {isPaid ? 'Lunas' : 'Belum Bayar'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right space-x-1">
+                        {!isPaid && (
+                          <>
+                            <button
+                              onClick={() => onOpenUtility(b)}
+                              className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100"
+                            >
+                              + Listrik
+                            </button>
+                            <button
+                              onClick={() => markPaid(b.id)}
+                              className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg hover:bg-emerald-100"
+                            >
+                              Tandai Lunas
+                            </button>
+                          </>
+                        )}
+                        {isPaid && (
+                          <span className="text-[10px] text-slate-400">
+                            {b.paid_at ? new Date(b.paid_at).toLocaleDateString('id-ID') : 'Selesai'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {bills.length === 0 && (
+                  <tr>
+                    <td colSpan="7" className="text-center py-8 text-slate-400">Belum ada riwayat tagihan.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // TAB 4: PENGELUARAN KAS
+    function ExpensesView({ expenses, refresh }) {
+      const [category, setCategory] = useState('wifi');
+      const [amount, setAmount] = useState('');
+      const [description, setDescription] = useState('');
+      const [saving, setSaving] = useState(false);
+
+      const handleAddExpense = async (e) => {
+        e.preventDefault();
+        if (!amount) return;
+        setSaving(true);
+        try {
+          await db.from('expenses').insert([{
+            category,
+            amount: parseFloat(amount),
+            description,
+            expense_date: new Date().toISOString().split('T')[0]
+          }]);
+          setAmount('');
+          setDescription('');
+          refresh();
+        } catch (err) {
+          alert('Gagal mencatat kas: ' + err.message);
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      const totalExpense = expenses.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-fit">
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Catat Kas Keluar</h3>
+            <form onSubmit={handleAddExpense} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1 uppercase">Kategori</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                >
+                  <option value="wifi">WiFi / Internet</option>
+                  <option value="sampah">Iuran Lingkungan / Sampah</option>
+                  <option value="listrik_umum">Token Listrik Bersama</option>
+                  <option value="perbaikan">Perbaikan & Servis</option>
+                  <option value="lainnya">Lainnya</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1 uppercase">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  placeholder="250000"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1 uppercase">Keterangan</label>
+                <textarea
+                  rows="2"
+                  placeholder="Misal: Beli lampu lorong & kran"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-xl text-xs transition disabled:bg-slate-400"
+              >
+                {saving ? 'Menyimpan...' : 'Simpan Pengeluaran'}
+              </button>
+            </form>
+          </div>
+
+          <div className="md:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">Riwayat Kas Keluar</h3>
+              <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-full">
+                Total: - Rp {totalExpense.toLocaleString('id-ID')}
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
+              {expenses.map((item) => (
+                <div key={item.id} className="py-2.5 flex justify-between items-start">
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 capitalize">{item.category.replace('_', ' ')}</p>
+                    <p className="text-[11px] text-slate-500">{item.description || '-'}</p>
+                    <span className="text-[10px] text-slate-400">{item.expense_date}</span>
+                  </div>
+                  <span className="text-xs font-bold text-rose-600">
+                    - Rp {Number(item.amount).toLocaleString('id-ID')}
+                  </span>
+                </div>
+              ))}
+              {expenses.length === 0 && (
+                <p className="text-center py-8 text-xs text-slate-400">Belum ada pengeluaran kas.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // MODAL: TAMBAH UNIT BARU
+    function AddRoomModal({ onClose, refresh }) {
+      const [roomNumber, setRoomNumber] = useState('');
+      const [price, setPrice] = useState('1000000');
+      const [saving, setSaving] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+          await db.from('rooms').insert([{
+            room_number: roomNumber,
+            monthly_price: parseFloat(price),
+            status: 'empty'
+          }]);
+          refresh();
+          onClose();
+        } catch (err) {
+          alert('Gagal menambah kamar: ' + err.message);
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-100">
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Tambah Unit Kamar</h3>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nomor / Nama Unit</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: 101, A2, dsb."
+                  value={roomNumber}
+                  onChange={(e) => setRoomNumber(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Harga Sewa / Bulan (Rp)</label>
+                <input
+                  type="number"
+                  required
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl"
+                >
+                  {saving ? 'Menyimpan...' : 'Simpan Unit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // MODAL: CHECK-IN PENYEWA
+    function AddTenantModal({ rooms, onClose, refresh }) {
+      const [roomId, setRoomId] = useState(rooms[0]?.id || '');
+      const [fullName, setFullName] = useState('');
+      const [phone, setPhone] = useState('');
+      const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
+      const [dueDay, setDueDay] = useState(new Date().getDate());
+      const [saving, setSaving] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!roomId) return alert('Pilih kamar terlebih dahulu');
+        setSaving(true);
+        try {
+          const selectedRoom = rooms.find(r => r.id === roomId);
+
+          // 1. Simpan Penyewa
+          const { data: tenant, error: tErr } = await db.from('tenants').insert([{
+            room_id: roomId,
+            full_name: fullName,
+            phone,
+            entry_date: entryDate,
+            due_day: parseInt(dueDay)
+          }]).select().single();
+          if (tErr) throw tErr;
+
+          // 2. Tandai Kamar Terisi
+          await db.from('rooms').update({ status: 'occupied' }).eq('id', roomId);
+
+          // 3. Buat Tagihan Pertama Otomatis
+          const billingMonth = new Date(entryDate);
+          billingMonth.setDate(1);
+
+          await db.from('bills').insert([{
+            tenant_id: tenant.id,
+            room_id: roomId,
+            billing_month: billingMonth.toISOString().split('T')[0],
+            rent_amount: selectedRoom.monthly_price,
+            utility_cost: 0,
+            payment_status: 'unpaid',
+            notes: 'Tagihan bulan pertama'
+          }]);
+
+          refresh();
+          onClose();
+        } catch (err) {
+          alert('Gagal check-in: ' + err.message);
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-100">
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Check-In Penyewa Baru</h3>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Pilih Kamar Kosong</label>
+                <select
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                  required
+                >
+                  <option value="">-- Pilih Kamar --</option>
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      Unit {r.room_number} - Rp {Number(r.monthly_price).toLocaleString('id-ID')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Budi Santoso"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">No. WhatsApp</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="081234567890"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Tgl Masuk</label>
+                  <input
+                    type="date"
+                    required
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Jatuh Tempo (Tgl)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    required
+                    value={dueDay}
+                    onChange={(e) => setDueDay(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl"
+                >
+                  {saving ? 'Menyimpan...' : 'Check-In & Terbitkan Tagihan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // MODAL: KALKULATOR LISTRIK/UTILITAS
+    function UtilityModal({ bill, onClose, refresh }) {
+      const [prevMeter, setPrevMeter] = useState(0);
+      const [currMeter, setCurrMeter] = useState(0);
+      const [rate, setRate] = useState(2500);
+      const [saving, setSaving] = useState(false);
+
+      const usage = Math.max(0, currMeter - prevMeter);
+      const cost = usage * rate;
+
+      const handleSave = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+          await db.from('bills').update({
+            utility_cost: cost,
+            notes: `Listrik: (${currMeter} - ${prevMeter}) = ${usage} kWh @ Rp ${Number(rate).toLocaleString('id-ID')}`
+          }).eq('id', bill.id);
+          refresh();
+          onClose();
+        } catch (err) {
+          alert('Gagal menambah utilitas: ' + err.message);
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-xs w-full p-5 shadow-xl border border-slate-100">
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Input Meteran Listrik</h3>
+            <p className="text-[11px] text-slate-500 mb-3">Tambahkan biaya ke tagihan berjalan</p>
+
+            <form onSubmit={handleSave} className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Meter Awal</label>
+                  <input
+                    type="number"
+                    value={prevMeter}
+                    onChange={(e) => setPrevMeter(Number(e.target.value))}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs focus:outline-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Meter Akhir</label>
+                  <input
+                    type="number"
+                    value={currMeter}
+                    onChange={(e) => setCurrMeter(Number(e.target.value))}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs focus:outline-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 block mb-1">Tarif / kWh (Rp)</label>
+                <input
+                  type="number"
+                  value={rate}
+                  onChange={(e) => setRate(Number(e.target.value))}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs focus:outline-blue-600"
+                />
+              </div>
+
+              <div className="bg-slate-50 p-2.5 rounded-xl text-[11px] space-y-1 text-slate-600">
+                <div className="flex justify-between">
+                  <span>Pemakaian:</span>
+                  <span className="font-bold">{usage} kWh</span>
+                </div>
+                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-1">
+                  <span>Total Biaya:</span>
+                  <span>Rp {cost.toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl"
+                >
+                  {saving ? 'Menghitung...' : 'Terapkan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // Render ke Root DOM
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
