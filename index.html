@@ -444,22 +444,37 @@
       };
 
       const sendWhatsAppInvoice = (bill, tenant, room) => {
-        const total = Number(bill.rent_amount) + Number(bill.utility_cost || 0);
+        const occCount = Math.max(1, tenant?.occupant_count || 1);
+        const totalRoom = Number(bill.rent_amount) + Number(bill.utility_cost || 0);
+        const totalPerPerson = Math.round(totalRoom / occCount);
+        const rentPerPerson = Math.round(Number(bill.rent_amount) / occCount);
+        const utilityPerPerson = Math.round(Number(bill.utility_cost || 0) / occCount);
+
         let phone = tenant?.phone ? tenant.phone.replace(/[^0-9]/g, '') : '';
         if (phone.startsWith('0')) phone = '62' + phone.slice(1);
 
-        const occCount = tenant?.occupant_count || 1;
-        const occLabel = occCount > 1 ? ` (Double / ${occCount} Orang)` : ` (1 Orang)`;
+        const isDouble = occCount > 1;
 
-        let msg = `Halo Kak *${tenant?.full_name}*,\nBerikut rincian tagihan sewa untuk *Kamar ${room?.room_number}${occLabel}*:\n\n`;
-        msg += `• Sewa Pokok Kamar: Rp ${Number(bill.rent_amount).toLocaleString('id-ID')}\n`;
-        if (bill.utility_cost > 0) {
-          msg += `• Utilitas (Listrik & Air): Rp ${Number(bill.utility_cost).toLocaleString('id-ID')}\n`;
-          if (bill.notes) msg += `  _${bill.notes}_\n`;
+        let msg = `Halo Kak *${tenant?.full_name}*,\nBerikut rincian tagihan sewa untuk *Kamar ${room?.room_number}* ${isDouble ? '(Porsi 1 Orang / Dibagi 2)' : ''}:\n\n`;
+        
+        if (isDouble) {
+          msg += `• Sewa Pokok (Porsi Anda): Rp ${rentPerPerson.toLocaleString('id-ID')} _(Kamar: Rp ${Number(bill.rent_amount).toLocaleString('id-ID')} ÷ 2)_\n`;
+          if (bill.utility_cost > 0) {
+            msg += `• Listrik & Air (Porsi Anda): Rp ${utilityPerPerson.toLocaleString('id-ID')} _(Total Utilitas: Rp ${Number(bill.utility_cost).toLocaleString('id-ID')} ÷ 2)_\n`;
+          }
+          msg += `------------------------------------\n`;
+          msg += `*TOTAL TAGIHAN ANDA (PER ORANG): Rp ${totalPerPerson.toLocaleString('id-ID')}*\n`;
+          msg += `_(Total 1 Kamar Berdua: Rp ${totalRoom.toLocaleString('id-ID')})_\n\n`;
+        } else {
+          msg += `• Sewa Pokok Kamar: Rp ${Number(bill.rent_amount).toLocaleString('id-ID')}\n`;
+          if (bill.utility_cost > 0) {
+            msg += `• Utilitas (Listrik & Air): Rp ${Number(bill.utility_cost).toLocaleString('id-ID')}\n`;
+          }
+          msg += `------------------------------------\n`;
+          msg += `*TOTAL TAGIHAN: Rp ${totalRoom.toLocaleString('id-ID')}*\n\n`;
         }
-        msg += `------------------------------------\n`;
-        msg += `*TOTAL TAGIHAN: Rp ${total.toLocaleString('id-ID')}*\n\n`;
-        msg += `Pembayaran dapat ditransfer ke rekening BCA pengelola.\nMohon kirimkan konfirmasi bukti transfer jika sudah melakukan pembayaran ya kak. Terima kasih! 🙏`;
+
+        msg += `Pembayaran dapat ditransfer ke rekening BCA pengelola: *1234-567-890* a/n Pengelola Plawa Kost.\nMohon kirimkan konfirmasi bukti transfer jika sudah melakukan pembayaran ya kak. Terima kasih! 🙏`;
 
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
       };
@@ -518,6 +533,11 @@
                         </td>
                         <td className="px-4 py-3 font-bold text-emerald-400">
                           Rp {total.toLocaleString('id-ID')}
+                          {isDouble && (
+                            <span className="block text-[10px] text-slate-400 font-normal">
+                              (Rp {Math.round(total / 2).toLocaleString('id-ID')} / orang)
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -716,16 +736,23 @@
       );
     }
 
-    // MODAL INVOICE RESMI (NOTA FAKTUR DIGITAL SIAP CETAK)
+    // MODAL INVOICE RESMI (PER ORANG / SPLIT BILL DUAAN)
     function InvoiceModal({ bill, tenant, room, onClose }) {
       if (!bill) return null;
 
-      const total = Number(bill.rent_amount) + Number(bill.utility_cost || 0);
-      const isPaid = bill.payment_status === 'paid';
-      const isDouble = tenant && (tenant.occupant_count || 1) > 1;
+      const occCount = Math.max(1, tenant?.occupant_count || 1);
+      const isDouble = occCount > 1;
 
-      // Format Nomor Invoice (contoh: INV-202610-A)
-      const invoiceNumber = `INV-${bill.billing_month.replace(/-/g, '').substring(0, 6)}-${room?.room_number || 'X'}`;
+      // Perhitungan Porsi Per Orang
+      const totalRoom = Number(bill.rent_amount) + Number(bill.utility_cost || 0);
+      const rentPerPerson = Math.round(Number(bill.rent_amount) / occCount);
+      const utilityPerPerson = Math.round(Number(bill.utility_cost || 0) / occCount);
+      const totalPerPerson = Math.round(totalRoom / occCount);
+
+      const isPaid = bill.payment_status === 'paid';
+
+      // Format Nomor Invoice
+      const invoiceNumber = `INV-${bill.billing_month.replace(/-/g, '').substring(0, 6)}-${room?.room_number || 'X'}${isDouble ? '-P1' : ''}`;
 
       const handlePrint = () => {
         window.print();
@@ -734,9 +761,11 @@
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="relative max-w-xl w-full my-6">
-            {/* Tombol Aksi di Atas (Tidak ikut tercetak) */}
+            {/* Tombol Aksi di Atas (Tidak ikut dicetak) */}
             <div className="flex justify-between items-center mb-3 no-print">
-              <span className="text-xs text-slate-400">Pratinjau Nota Invoice</span>
+              <span className="text-xs text-slate-400">
+                Pratinjau Nota Faktur {isDouble ? '(Porsi Per Orang)' : ''}
+              </span>
               <div className="flex gap-2">
                 <button
                   onClick={handlePrint}
@@ -772,7 +801,9 @@
                 </div>
 
                 <div className="text-right">
-                  <span className="text-xs font-extrabold text-emerald-600 uppercase tracking-widest">INVOICE SEWA</span>
+                  <span className="text-xs font-extrabold text-emerald-600 uppercase tracking-widest block">
+                    INVOICE SEWA {isDouble ? '(SPLIT BILL)' : ''}
+                  </span>
                   <p className="text-sm font-bold text-slate-800 mt-1">{invoiceNumber}</p>
                   <p className="text-xs text-slate-500 mt-0.5">Periode: {bill.billing_month}</p>
                 </div>
@@ -783,7 +814,9 @@
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ditagihkan Kepada</span>
                   <p className="text-sm font-bold text-slate-900">{tenant?.full_name || '-'}</p>
-                  <p className="text-slate-600 mt-0.5">Kamar {room?.room_number} • {isDouble ? 'Double (2 Orang)' : 'Single (1 Orang)'}</p>
+                  <p className="text-slate-600 mt-0.5">
+                    Kamar {room?.room_number} • {isDouble ? 'Double (Porsi 1 dari 2 Orang)' : 'Single (1 Orang)'}
+                  </p>
                   <p className="text-slate-500 mt-0.5">{tenant?.phone || '-'}</p>
                 </div>
 
@@ -810,17 +843,21 @@
                   <thead>
                     <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       <th className="pb-3">Keterangan Biaya</th>
-                      <th className="pb-3 text-right">Subtotal</th>
+                      <th className="pb-3 text-right">Subtotal Porsi Anda</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     <tr>
                       <td className="py-3">
-                        <p className="font-bold text-slate-800">Sewa Pokok Kamar {room?.room_number}</p>
-                        <p className="text-[11px] text-slate-500">Sewa bulanan unit kost</p>
+                        <p className="font-bold text-slate-800">Sewa Kamar {room?.room_number}</p>
+                        <p className="text-[11px] text-slate-500">
+                          {isDouble 
+                            ? `Total sewa Rp ${Number(bill.rent_amount).toLocaleString('id-ID')} ÷ 2 orang` 
+                            : 'Sewa bulanan unit kost'}
+                        </p>
                       </td>
                       <td className="py-3 text-right font-semibold text-slate-800">
-                        Rp {Number(bill.rent_amount).toLocaleString('id-ID')}
+                        Rp {rentPerPerson.toLocaleString('id-ID')}
                       </td>
                     </tr>
 
@@ -829,22 +866,33 @@
                         <td className="py-3">
                           <p className="font-bold text-slate-800">Biaya Utilitas (Listrik & Air)</p>
                           <p className="text-[11px] text-slate-500 italic leading-relaxed">
-                            {bill.notes || 'Biaya meteran listrik dan iuran air'}
+                            {isDouble 
+                              ? `Total utilitas Rp ${Number(bill.utility_cost).toLocaleString('id-ID')} ÷ 2 orang (${bill.notes})` 
+                              : (bill.notes || 'Biaya meteran listrik dan iuran air')}
                           </p>
                         </td>
                         <td className="py-3 text-right font-semibold text-slate-800">
-                          Rp {Number(bill.utility_cost).toLocaleString('id-ID')}
+                          Rp {utilityPerPerson.toLocaleString('id-ID')}
                         </td>
                       </tr>
                     )}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-slate-900 text-sm">
-                      <th className="pt-4 font-black text-slate-900 uppercase">Total Tagihan</th>
+                      <th className="pt-4 font-black text-slate-900 uppercase">
+                        {isDouble ? 'Total Tagihan Per Orang' : 'Total Tagihan'}
+                      </th>
                       <th className="pt-4 text-right font-black text-emerald-600 text-base">
-                        Rp {total.toLocaleString('id-ID')}
+                        Rp {totalPerPerson.toLocaleString('id-ID')}
                       </th>
                     </tr>
+                    {isDouble && (
+                      <tr>
+                        <td colSpan="2" className="text-right text-[11px] text-slate-400 pt-1 font-normal italic">
+                          *Total keseluruhan 1 kamar (gabungan berdua): Rp {totalRoom.toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    )}
                   </tfoot>
                 </table>
               </div>
@@ -1245,7 +1293,7 @@
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-emerald-500"
                 >
                   <option value={1}>1 Orang (Single)</option>
-                  <option value={2}>2 Orang (Double - Tagihan Air x2)</option>
+                  <option value={2}>2 Orang (Double - Tagihan Dibagi Dua)</option>
                 </select>
               </div>
 
