@@ -21,8 +21,11 @@
     const { useState, useEffect } = React;
 
     // Masukkan kredensial Supabase kamu di sini
-    const SUPABASE_URL = 'https://kakulbrerong.supabase.co'; // ganti dengan URL Supabase kamu
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // ganti dengan Anon Key kamu
+    const SUPABASE_URL = 'https://oqqrarwwbhxdpocaerog.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcXJhcnd3Ymh4ZHBvY2Flcm9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDI1NDksImV4cCI6MjEwNjY3ODU0OX0.XHVPjy01DZHo5uKhGZyClA-Jr6nKeqQi4FajatbSZKI';
+
+// Di browser (window.supabase):
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     function App() {
