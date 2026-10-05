@@ -9,36 +9,10 @@
   <!-- React & ReactDOM CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Babel Standalone (Compiler JSX) -->
+  <!-- Babel Compiler CDN -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Supabase JS Client v2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-  <style>
-    @media print {
-      body * {
-        visibility: hidden;
-      }
-      #invoice-printable, #invoice-printable * {
-        visibility: visible;
-      }
-      #invoice-printable {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: 100%;
-        margin: 0;
-        padding: 24px;
-        background: white !important;
-        color: black !important;
-        box-shadow: none !important;
-        border: none !important;
-      }
-      .no-print {
-        display: none !important;
-      }
-    }
-  </style>
 </head>
 <body class="bg-slate-950 text-slate-200 antialiased font-sans">
   <div id="root"></div>
@@ -46,7 +20,7 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // Kredensial Supabase Project Plawa Kost
+    // Supabase Client
     const SUPABASE_URL = 'https://oqqrarwwbhxdpocaerog.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcXJhcnd3Ymh4ZHBvY2Flcm9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDI1NDksImV4cCI6MjEwNjY3ODU0OX0.XHVPjy01DZHo5uKhGZyClA-Jr6nKeqQi4FajatbSZKI';
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -57,28 +31,31 @@
       const [tenants, setTenants] = useState([]);
       const [bills, setBills] = useState([]);
       const [expenses, setExpenses] = useState([]);
+      const [complaints, setComplaints] = useState([]);
       const [loading, setLoading] = useState(true);
 
       // Modal States
       const [isAddTenantOpen, setIsAddTenantOpen] = useState(false);
       const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
+      const [isAddComplaintOpen, setIsAddComplaintOpen] = useState(false);
       const [selectedBillForUtility, setSelectedBillForUtility] = useState(null);
-      const [selectedBillForInvoice, setSelectedBillForInvoice] = useState(null);
 
       const loadAllData = async () => {
         setLoading(true);
         try {
-          const [roomsRes, tenantsRes, billsRes, expensesRes] = await Promise.all([
+          const [roomsRes, tenantsRes, billsRes, expensesRes, complaintsRes] = await Promise.all([
             db.from('rooms').select('*').order('room_number'),
             db.from('tenants').select('*').eq('is_active', true).order('created_at', { ascending: false }),
             db.from('bills').select('*').order('created_at', { ascending: false }),
-            db.from('expenses').select('*').order('expense_date', { ascending: false })
+            db.from('expenses').select('*').order('expense_date', { ascending: false }),
+            db.from('complaints').select('*').order('created_at', { ascending: false })
           ]);
 
           if (roomsRes.data) setRooms(roomsRes.data);
           if (tenantsRes.data) setTenants(tenantsRes.data);
           if (billsRes.data) setBills(billsRes.data);
           if (expensesRes.data) setExpenses(expensesRes.data);
+          if (complaintsRes.data) setComplaints(complaintsRes.data);
         } catch (err) {
           console.error("Gagal membaca database:", err);
         } finally {
@@ -90,17 +67,20 @@
         loadAllData();
       }, []);
 
+      const pendingComplaintsCount = complaints.filter(c => c.status !== 'resolved').length;
+
       const navItems = [
         { id: 'rooms', label: 'Denah Kamar', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-        { id: 'tenants', label: 'Penyewa', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-        { id: 'billing', label: 'Tagihan & Invoice', icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z' },
+        { id: 'tenants', label: 'Penghuni', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
+        { id: 'billing', label: 'Invoice Penghuni', icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z' },
+        { id: 'complaints', label: 'Tiket Komplain', badge: pendingComplaintsCount, icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
         { id: 'expenses', label: 'Kas Pengeluaran', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' }
       ];
 
       return (
         <div className="min-h-screen flex flex-col md:flex-row bg-slate-950 text-slate-300">
           {/* SIDEBAR */}
-          <aside className="w-full md:w-64 bg-slate-900/90 border-b md:border-b-0 md:border-r border-slate-800/80 p-5 flex flex-col shrink-0 no-print">
+          <aside className="w-full md:w-64 bg-slate-900/90 border-b md:border-b-0 md:border-r border-slate-800/80 p-5 flex flex-col shrink-0">
             <div className="flex items-center gap-3 mb-8">
               <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-lg">
                 P
@@ -116,24 +96,29 @@
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                     activeTab === item.id
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
                   }`}
                 >
-                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path>
-                  </svg>
-                  {item.label}
+                  <div className="flex items-center gap-3">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path>
+                    </svg>
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge > 0 && (
+                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-2">
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
 
-            <div className="mt-auto hidden md:block pt-6 border-t border-slate-800/60">
-              <div className="text-[11px] text-slate-400">
-                Status DB: <span className="text-emerald-400 font-medium">Terhubung</span>
-              </div>
+            <div className="mt-auto hidden md:block pt-6 border-t border-slate-800/60 text-[11px] text-slate-400">
+              Database: <span className="text-emerald-400 font-medium">Terhubung</span>
             </div>
           </aside>
 
@@ -166,7 +151,15 @@
                     tenants={tenants} 
                     rooms={rooms} 
                     onOpenUtility={(bill) => setSelectedBillForUtility(bill)} 
-                    onOpenInvoice={(bill) => setSelectedBillForInvoice(bill)}
+                    refresh={loadAllData}
+                  />
+                )}
+                {activeTab === 'complaints' && (
+                  <ComplaintsView 
+                    complaints={complaints} 
+                    rooms={rooms} 
+                    tenants={tenants} 
+                    onOpenAdd={() => setIsAddComplaintOpen(true)} 
                     refresh={loadAllData}
                   />
                 )}
@@ -189,8 +182,16 @@
           )}
           {isAddTenantOpen && (
             <AddTenantModal 
-              rooms={rooms.filter(r => r.status === 'empty')} 
+              rooms={rooms} 
               onClose={() => setIsAddTenantOpen(false)} 
+              refresh={loadAllData} 
+            />
+          )}
+          {isAddComplaintOpen && (
+            <AddComplaintModal 
+              rooms={rooms} 
+              tenants={tenants} 
+              onClose={() => setIsAddComplaintOpen(false)} 
               refresh={loadAllData} 
             />
           )}
@@ -199,16 +200,9 @@
               bill={selectedBillForUtility} 
               tenant={tenants.find(t => t.id === selectedBillForUtility.tenant_id)}
               room={rooms.find(r => r.id === selectedBillForUtility.room_id)}
+              allTenantsInRoom={tenants.filter(t => t.room_id === selectedBillForUtility.room_id)}
               onClose={() => setSelectedBillForUtility(null)} 
               refresh={loadAllData} 
-            />
-          )}
-          {selectedBillForInvoice && (
-            <InvoiceModal
-              bill={selectedBillForInvoice}
-              tenant={tenants.find(t => t.id === selectedBillForInvoice.tenant_id)}
-              room={rooms.find(r => r.id === selectedBillForInvoice.room_id)}
-              onClose={() => setSelectedBillForInvoice(null)}
             />
           )}
         </div>
@@ -219,51 +213,45 @@
     function RoomsView({ rooms, tenants, onOpenAddRoom }) {
       const total = rooms.length;
       const occupied = rooms.filter(r => r.status === 'occupied').length;
-      const rate = total > 0 ? Math.round((occupied / total) * 100) : 0;
-      const totalOccupants = tenants.reduce((acc, curr) => acc + (curr.occupant_count || 1), 0);
+      const totalTenants = tenants.length;
 
       return (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-bold text-slate-100">Denah & Status Kamar</h2>
-              <p className="text-xs text-slate-400">Pantau ketersediaan unit dan jumlah penghuni</p>
+              <p className="text-xs text-slate-400">Kapasitas kamar & data penghuni terdaftar</p>
             </div>
             <button
               onClick={onOpenAddRoom}
-              className="bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-sm"
+              className="bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition"
             >
               + Tambah Kamar
             </button>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
-            <div className="bg-slate-900 border border-slate-800/80 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 font-medium">Total Kamar</span>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-xs text-slate-400">Total Unit Kamar</span>
               <p className="text-xl font-bold text-slate-200 mt-1">{total}</p>
             </div>
-            <div className="bg-slate-900 border border-slate-800/80 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 font-medium">Kamar Terisi</span>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-xs text-slate-400">Unit Terisi</span>
               <p className="text-xl font-bold text-sky-400 mt-1">{occupied}</p>
             </div>
-            <div className="bg-slate-900 border border-slate-800/80 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 font-medium">Total Jiwa</span>
-              <p className="text-xl font-bold text-purple-400 mt-1">{totalOccupants} Orang</p>
-            </div>
-            <div className="bg-slate-900 border border-slate-800/80 p-4 rounded-2xl">
-              <span className="text-xs text-slate-400 font-medium">Okupansi</span>
-              <p className="text-xl font-bold text-emerald-400 mt-1">{rate}%</p>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-xs text-slate-400">Total Jiwa Penghuni</span>
+              <p className="text-xl font-bold text-emerald-400 mt-1">{totalTenants} Orang</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {rooms.map((room) => {
-              const activeTenant = tenants.find(t => t.room_id === room.id);
-              const isOccupied = room.status === 'occupied';
-              const isDouble = activeTenant && (activeTenant.occupant_count || 1) > 1;
+              const occupants = tenants.filter(t => t.room_id === room.id);
+              const isOccupied = occupants.length > 0;
 
               return (
-                <div key={room.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between h-44 shadow-sm hover:border-slate-700 transition">
+                <div key={room.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between min-h-48 shadow-sm">
                   <div>
                     <div className="flex justify-between items-start">
                       <span className="text-2xl font-black text-slate-100">Kamar {room.room_number}</span>
@@ -272,27 +260,24 @@
                           ? 'bg-sky-950/60 text-sky-300 border-sky-800/50' 
                           : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50'
                       }`}>
-                        {isOccupied ? 'Terisi' : 'Kosong'}
+                        {isOccupied ? `${occupants.length} Orang` : 'Kosong'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Rp {Number(room.monthly_price).toLocaleString('id-ID')} / bln
+                      Rp {Number(room.monthly_price).toLocaleString('id-ID')} / kamar / bln
                     </p>
                   </div>
 
-                  <div className="border-t border-slate-800/80 pt-3">
-                    {isOccupied && activeTenant ? (
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Penghuni</p>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                            isDouble ? 'bg-purple-950/80 text-purple-300 border border-purple-800/50' : 'bg-slate-800 text-slate-300'
-                          }`}>
-                            {isDouble ? '2 Org (Double)' : '1 Org (Single)'}
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-slate-200 truncate mt-0.5">{activeTenant.full_name}</p>
-                        <p className="text-[10px] text-slate-400">Jatuh Tempo: Tgl {activeTenant.due_day}</p>
+                  <div className="border-t border-slate-800/80 pt-3 mt-3">
+                    {isOccupied ? (
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Daftar Penghuni:</p>
+                        {occupants.map(occ => (
+                          <div key={occ.id} className="text-xs text-slate-200 flex justify-between">
+                            <span className="font-medium">• {occ.full_name}</span>
+                            <span className="text-slate-400 text-[10px]">Tgl {occ.due_day}</span>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400 italic">Siap disewakan</p>
@@ -306,13 +291,16 @@
       );
     }
 
-    // 2. TAB PENYEWA
+    // 2. TAB PENGHUNI (INDIVIDU)
     function TenantsView({ tenants, rooms, onOpenCheckIn, refresh }) {
       const handleCheckout = async (tenant) => {
-        if (!confirm(`Konfirmasi checkout untuk ${tenant.full_name}? Kamar akan berstatus kosong.`)) return;
+        if (!confirm(`Konfirmasi checkout untuk ${tenant.full_name}?`)) return;
         try {
           await db.from('tenants').update({ is_active: false }).eq('id', tenant.id);
-          if (tenant.room_id) {
+          
+          // Cek apakah masih ada penghuni lain di kamar ini
+          const remaining = tenants.filter(t => t.room_id === tenant.room_id && t.id !== tenant.id);
+          if (remaining.length === 0 && tenant.room_id) {
             await db.from('rooms').update({ status: 'empty' }).eq('id', tenant.room_id);
           }
           refresh();
@@ -326,13 +314,13 @@
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-lg font-bold text-slate-100">Data Penghuni Aktif</h2>
-              <p className="text-xs text-slate-400">Total {tenants.length} kamar terisi</p>
+              <p className="text-xs text-slate-400">Total {tenants.length} orang terdaftar</p>
             </div>
             <button
               onClick={onOpenCheckIn}
               className="bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition"
             >
-              + Check-In Penyewa
+              + Check-In Penghuni Baru
             </button>
           </div>
 
@@ -342,8 +330,7 @@
                 <thead className="bg-slate-950/60 border-b border-slate-800 text-slate-400 uppercase font-semibold text-[10px]">
                   <tr>
                     <th className="px-4 py-3">Kamar</th>
-                    <th className="px-4 py-3">Tipe</th>
-                    <th className="px-4 py-3">Nama Lengkap</th>
+                    <th className="px-4 py-3">Nama Penghuni</th>
                     <th className="px-4 py-3">WhatsApp</th>
                     <th className="px-4 py-3">Tgl Masuk</th>
                     <th className="px-4 py-3">Jatuh Tempo</th>
@@ -353,18 +340,9 @@
                 <tbody className="divide-y divide-slate-800/60">
                   {tenants.map((t) => {
                     const room = rooms.find(r => r.id === t.room_id);
-                    const isDouble = (t.occupant_count || 1) > 1;
-
                     return (
                       <tr key={t.id} className="hover:bg-slate-800/40 transition">
                         <td className="px-4 py-3 font-bold text-slate-100">Kamar {room?.room_number || '-'}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            isDouble ? 'bg-purple-950 text-purple-300 border border-purple-800/40' : 'bg-slate-800 text-slate-400'
-                          }`}>
-                            {isDouble ? '2 Org (Double)' : '1 Org'}
-                          </span>
-                        </td>
                         <td className="px-4 py-3 font-medium text-slate-200">{t.full_name}</td>
                         <td className="px-4 py-3 text-slate-400">{t.phone}</td>
                         <td className="px-4 py-3 text-slate-400">{t.entry_date}</td>
@@ -382,7 +360,7 @@
                   })}
                   {tenants.length === 0 && (
                     <tr>
-                      <td colSpan="7" className="text-center py-10 text-slate-400">Belum ada penyewa aktif.</td>
+                      <td colSpan="6" className="text-center py-10 text-slate-400">Belum ada penghuni aktif.</td>
                     </tr>
                   )}
                 </tbody>
@@ -393,8 +371,8 @@
       );
     }
 
-    // 3. TAB TAGIHAN & INVOICE
-    function BillingView({ bills, tenants, rooms, onOpenUtility, onOpenInvoice, refresh }) {
+    // 3. TAB INVOICE PER ORANG (DENGAN RINCIAN LENGKAP & WA)
+    function BillingView({ bills, tenants, rooms, onOpenUtility, refresh }) {
       const [generating, setGenerating] = useState(false);
 
       const markPaid = async (billId) => {
@@ -409,11 +387,12 @@
         }
       };
 
+      // Generate invoice bulanan per orang
       const handleGenerateMonthlyBills = async () => {
         const today = new Date();
         const nextMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
         
-        if (!confirm(`Terbitkan tagihan baru untuk semua penghuni aktif periode ${nextMonth}?`)) return;
+        if (!confirm(`Terbitkan tagihan baru untuk semua orang untuk periode ${nextMonth}?`)) return;
 
         setGenerating(true);
         try {
@@ -422,59 +401,65 @@
             const existing = bills.find(b => b.tenant_id === tenant.id && b.billing_month === nextMonth);
             if (!existing) {
               const room = rooms.find(r => r.id === tenant.room_id);
+              const roomTenants = tenants.filter(t => t.room_id === tenant.room_id);
+              const tenantCount = Math.max(1, roomTenants.length);
+
+              // Sewa kamar dibagi jumlah orang di kamar itu
+              const splitRent = room ? (Number(room.monthly_price) / tenantCount) : 0;
+              // Sampah kamar flat Rp 25.000 dibagi jumlah orang
+              const splitWaste = 25000 / tenantCount;
+              // Air default per kepala Rp 30.000
+              const waterPerPerson = 30000;
+
               await db.from('bills').insert([{
                 tenant_id: tenant.id,
                 room_id: tenant.room_id,
                 billing_month: nextMonth,
-                rent_amount: room ? room.monthly_price : 0,
-                utility_cost: 0,
+                rent_amount: splitRent,
+                electric_cost: 0,
+                water_cost: waterPerPerson,
+                waste_cost: splitWaste,
+                extra_guest_cost: 0,
+                utility_cost: waterPerPerson + splitWaste,
                 payment_status: 'unpaid',
-                notes: 'Tagihan bulanan rutin'
+                notes: `Air Rp30rb, Sampah Rp${splitWaste.toLocaleString('id-ID')}`
               }]);
               createdCount++;
             }
           }
-          alert(`Berhasil menerbitkan ${createdCount} tagihan baru.`);
+          alert(`Berhasil menerbitkan ${createdCount} invoice baru.`);
           refresh();
         } catch (err) {
-          alert('Gagal menerbitkan tagihan: ' + err.message);
+          alert('Gagal menerbitkan invoice: ' + err.message);
         } finally {
           setGenerating(false);
         }
       };
 
+      // Format WhatsApp Pesan Rinci Per Orang
       const sendWhatsAppInvoice = (bill, tenant, room) => {
-        const occCount = Math.max(1, tenant?.occupant_count || 1);
-        const totalRoom = Number(bill.rent_amount) + Number(bill.utility_cost || 0);
-        const totalPerPerson = Math.round(totalRoom / occCount);
-        const rentPerPerson = Math.round(Number(bill.rent_amount) / occCount);
-        const utilityPerPerson = Math.round(Number(bill.utility_cost || 0) / occCount);
+        const rent = Number(bill.rent_amount || 0);
+        const electric = Number(bill.electric_cost || 0);
+        const water = Number(bill.water_cost || 0);
+        const waste = Number(bill.waste_cost || 0);
+        const extra = Number(bill.extra_guest_cost || 0);
+        const total = rent + electric + water + waste + extra;
 
         let phone = tenant?.phone ? tenant.phone.replace(/[^0-9]/g, '') : '';
         if (phone.startsWith('0')) phone = '62' + phone.slice(1);
 
-        const isDouble = occCount > 1;
-
-        let msg = `Halo Kak *${tenant?.full_name}*,\nBerikut rincian tagihan sewa untuk *Kamar ${room?.room_number}* ${isDouble ? '(Porsi 1 Orang / Dibagi 2)' : ''}:\n\n`;
-        
-        if (isDouble) {
-          msg += `• Sewa Pokok (Porsi Anda): Rp ${rentPerPerson.toLocaleString('id-ID')} _(Kamar: Rp ${Number(bill.rent_amount).toLocaleString('id-ID')} ÷ 2)_\n`;
-          if (bill.utility_cost > 0) {
-            msg += `• Listrik & Air (Porsi Anda): Rp ${utilityPerPerson.toLocaleString('id-ID')} _(Total Utilitas: Rp ${Number(bill.utility_cost).toLocaleString('id-ID')} ÷ 2)_\n`;
-          }
-          msg += `------------------------------------\n`;
-          msg += `*TOTAL TAGIHAN ANDA (PER ORANG): Rp ${totalPerPerson.toLocaleString('id-ID')}*\n`;
-          msg += `_(Total 1 Kamar Berdua: Rp ${totalRoom.toLocaleString('id-ID')})_\n\n`;
-        } else {
-          msg += `• Sewa Pokok Kamar: Rp ${Number(bill.rent_amount).toLocaleString('id-ID')}\n`;
-          if (bill.utility_cost > 0) {
-            msg += `• Utilitas (Listrik & Air): Rp ${Number(bill.utility_cost).toLocaleString('id-ID')}\n`;
-          }
-          msg += `------------------------------------\n`;
-          msg += `*TOTAL TAGIHAN: Rp ${totalRoom.toLocaleString('id-ID')}*\n\n`;
+        let msg = `Halo Kak *${tenant?.full_name}*,\n`;
+        msg += `Berikut rincian tagihan kost Kamar *${room?.room_number}*:\n\n`;
+        msg += `• Sewa Pokok: Rp ${rent.toLocaleString('id-ID')}\n`;
+        msg += `• Listrik (Porsi Kamar): Rp ${electric.toLocaleString('id-ID')}\n`;
+        msg += `• Air (Per Orang): Rp ${water.toLocaleString('id-ID')}\n`;
+        msg += `• Uang Sampah: Rp ${waste.toLocaleString('id-ID')}\n`;
+        if (extra > 0) {
+          msg += `• Tambahan Tamu/Non-Penyewa: Rp ${extra.toLocaleString('id-ID')}\n`;
         }
-
-        msg += `Pembayaran dapat ditransfer ke rekening BCA pengelola: *1234-567-890* a/n Pengelola Plawa Kost.\nMohon kirimkan konfirmasi bukti transfer jika sudah melakukan pembayaran ya kak. Terima kasih! 🙏`;
+        msg += `------------------------------------\n`;
+        msg += `*TOTAL TAGIHAN: Rp ${total.toLocaleString('id-ID')}*\n\n`;
+        msg += `Mohon konfirmasi dan kirim bukti transfer jika sudah membayar ya kak. Terima kasih! 🙏`;
 
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
       };
@@ -483,15 +468,15 @@
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
-              <h2 className="text-lg font-bold text-slate-100">Tagihan & Invoice Sewa</h2>
-              <p className="text-xs text-slate-400">Kelola rincian meteran dan cetak nota faktur resmi</p>
+              <h2 className="text-lg font-bold text-slate-100">Invoice Tagihan Per Orang</h2>
+              <p className="text-xs text-slate-400">Rincian sewa, listrik, air, sampah, & tambahan tamu</p>
             </div>
             <button
               onClick={handleGenerateMonthlyBills}
               disabled={generating}
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-sm"
             >
-              {generating ? 'Menerbitkan...' : '+ Terbitkan Tagihan Bulan Baru'}
+              {generating ? 'Menerbitkan...' : '+ Terbitkan Invoice Bulan Baru'}
             </button>
           </div>
 
@@ -500,13 +485,15 @@
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950/60 border-b border-slate-800 text-slate-400 uppercase font-semibold text-[10px]">
                   <tr>
-                    <th className="px-4 py-3">Kamar</th>
-                    <th className="px-4 py-3">Penyewa</th>
-                    <th className="px-4 py-3">Sewa Pokok</th>
-                    <th className="px-4 py-3">Listrik & Air</th>
-                    <th className="px-4 py-3">Total Tagihan</th>
+                    <th className="px-4 py-3">Penghuni & Kamar</th>
+                    <th className="px-4 py-3">Sewa</th>
+                    <th className="px-4 py-3">Listrik</th>
+                    <th className="px-4 py-3">Air</th>
+                    <th className="px-4 py-3">Sampah</th>
+                    <th className="px-4 py-3">Tamu</th>
+                    <th className="px-4 py-3">Total</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Aksi & Faktur</th>
+                    <th className="px-4 py-3 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -514,31 +501,26 @@
                     const room = rooms.find(r => r.id === b.room_id);
                     const tenant = tenants.find(t => t.id === b.tenant_id);
                     const isPaid = b.payment_status === 'paid';
-                    const total = Number(b.rent_amount) + Number(b.utility_cost || 0);
-                    const isDouble = tenant && (tenant.occupant_count || 1) > 1;
+
+                    const rent = Number(b.rent_amount || 0);
+                    const electric = Number(b.electric_cost || 0);
+                    const water = Number(b.water_cost || 0);
+                    const waste = Number(b.waste_cost || 0);
+                    const extra = Number(b.extra_guest_cost || 0);
+                    const total = rent + electric + water + waste + extra;
 
                     return (
                       <tr key={b.id} className="hover:bg-slate-800/40 transition">
-                        <td className="px-4 py-3 font-bold text-slate-100">Kamar {room?.room_number || '-'}</td>
                         <td className="px-4 py-3">
-                          <p className="text-slate-200 font-medium">{tenant?.full_name || '-'}</p>
-                          <span className="text-[10px] text-slate-400">{isDouble ? '2 Orang (Double)' : '1 Orang'}</span>
+                          <p className="font-bold text-slate-100">{tenant?.full_name || '-'}</p>
+                          <span className="text-[10px] text-slate-400">Kamar {room?.room_number || '-'}</span>
                         </td>
-                        <td className="px-4 py-3 text-slate-400">Rp {Number(b.rent_amount).toLocaleString('id-ID')}</td>
-                        <td className="px-4 py-3 max-w-xs">
-                          <span className="text-slate-300 font-medium">Rp {Number(b.utility_cost || 0).toLocaleString('id-ID')}</span>
-                          {b.notes && (
-                            <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{b.notes}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-bold text-emerald-400">
-                          Rp {total.toLocaleString('id-ID')}
-                          {isDouble && (
-                            <span className="block text-[10px] text-slate-400 font-normal">
-                              (Rp {Math.round(total / 2).toLocaleString('id-ID')} / orang)
-                            </span>
-                          )}
-                        </td>
+                        <td className="px-4 py-3 text-slate-400">Rp {rent.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-sky-400">Rp {electric.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-teal-400">Rp {water.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-slate-400">Rp {waste.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 text-amber-400">Rp {extra.toLocaleString('id-ID')}</td>
+                        <td className="px-4 py-3 font-bold text-emerald-400">Rp {total.toLocaleString('id-ID')}</td>
                         <td className="px-4 py-3">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                             isPaid 
@@ -549,16 +531,6 @@
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right space-x-1 whitespace-nowrap">
-                          {/* Tombol Buka Invoice */}
-                          <button
-                            onClick={() => onOpenInvoice(b)}
-                            title="Buka Nota Faktur"
-                            className="text-[11px] font-semibold text-purple-300 bg-purple-950/50 border border-purple-800/50 px-2 py-1 rounded-lg hover:bg-purple-900/60 transition"
-                          >
-                            Invoice
-                          </button>
-
-                          {/* Tombol WhatsApp */}
                           <button
                             onClick={() => sendWhatsAppInvoice(b, tenant, room)}
                             title="Kirim ke WhatsApp"
@@ -573,7 +545,7 @@
                                 onClick={() => onOpenUtility(b)}
                                 className="text-[11px] font-semibold text-sky-300 bg-sky-950/50 border border-sky-800/50 px-2 py-1 rounded-lg hover:bg-sky-900/60 transition"
                               >
-                                + Listrik/Air
+                                Edit Rincian
                               </button>
                               <button
                                 onClick={() => markPaid(b.id)}
@@ -593,7 +565,7 @@
                   })}
                   {bills.length === 0 && (
                     <tr>
-                      <td colSpan="7" className="text-center py-10 text-slate-400">Belum ada riwayat tagihan.</td>
+                      <td colSpan="9" className="text-center py-10 text-slate-400">Belum ada invoice diterbitkan.</td>
                     </tr>
                   )}
                 </tbody>
@@ -604,7 +576,100 @@
       );
     }
 
-    // 4. TAB PENGELUARAN KAS
+    // 4. TAB TIKET KOMPLAIN (BARU 🛠️)
+    function ComplaintsView({ complaints, rooms, tenants, onOpenAdd, refresh }) {
+      const updateStatus = async (id, newStatus) => {
+        try {
+          await db.from('complaints').update({ status: newStatus }).eq('id', id);
+          refresh();
+        } catch (err) {
+          alert('Gagal update tiket: ' + err.message);
+        }
+      };
+
+      const badgeStatus = {
+        pending: 'bg-amber-950/60 text-amber-300 border-amber-800/50',
+        in_progress: 'bg-sky-950/60 text-sky-300 border-sky-800/50',
+        resolved: 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50'
+      };
+
+      const labelStatus = {
+        pending: 'Menunggu',
+        in_progress: 'Sedang Dikerjakan',
+        resolved: 'Selesai'
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-bold text-slate-100">Tiket Komplain & Kerusakan</h2>
+              <p className="text-xs text-slate-400">Pelacakan perbaikan fasilitas kost</p>
+            </div>
+            <button
+              onClick={onOpenAdd}
+              className="bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition"
+            >
+              + Buat Tiket Baru
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {complaints.map((c) => {
+              const room = rooms.find(r => r.id === c.room_id);
+              const tenant = tenants.find(t => t.id === c.tenant_id);
+
+              return (
+                <div key={c.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm font-bold text-slate-100">{c.title}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeStatus[c.status]}`}>
+                        {labelStatus[c.status]}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{c.description || 'Tidak ada catatan tambahan.'}</p>
+                    <div className="text-[10px] text-slate-400 mt-2 space-x-2">
+                      <span className="text-slate-300 font-semibold">Kamar {room?.room_number || '-'}</span>
+                      <span>• Pelapor: {tenant?.full_name || 'Penghuni'}</span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-800/70 pt-2 flex justify-between items-center text-xs">
+                    <span className="text-[10px] text-slate-400">{new Date(c.created_at).toLocaleDateString('id-ID')}</span>
+                    <div className="flex gap-1.5">
+                      {c.status !== 'in_progress' && c.status !== 'resolved' && (
+                        <button
+                          onClick={() => updateStatus(c.id, 'in_progress')}
+                          className="text-[10px] bg-sky-950 text-sky-300 border border-sky-800/50 px-2 py-1 rounded-lg hover:bg-sky-900"
+                        >
+                          Kerjakan
+                        </button>
+                      )}
+                      {c.status !== 'resolved' && (
+                        <button
+                          onClick={() => updateStatus(c.id, 'resolved')}
+                          className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800/50 px-2 py-1 rounded-lg hover:bg-emerald-900"
+                        >
+                          Tandai Selesai
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {complaints.length === 0 && (
+              <div className="col-span-full py-12 text-center text-slate-400 text-xs">
+                Belum ada komplain atau keluhan fasilitas tercatat.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // 5. TAB PENGELUARAN KAS
     function ExpensesView({ expenses, refresh }) {
       const [category, setCategory] = useState('wifi');
       const [amount, setAmount] = useState('');
@@ -633,12 +698,12 @@
       };
 
       const handleDeleteExpense = async (id) => {
-        if (!confirm('Hapus catatan pengeluaran ini?')) return;
+        if (!confirm('Hapus pengeluaran ini?')) return;
         try {
           await db.from('expenses').delete().eq('id', id);
           refresh();
         } catch (err) {
-          alert('Gagal menghapus: ' + err.message);
+          alert('Gagal: ' + err.message);
         }
       };
 
@@ -647,7 +712,7 @@
       return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl h-fit">
-            <h3 className="text-sm font-bold text-slate-100 mb-3">Catat Kas Keluar</h3>
+            <h3 className="text-sm font-bold text-slate-100 mb-3">Catat Pengeluaran</h3>
             <form onSubmit={handleAddExpense} className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-slate-400 block mb-1">Kategori</label>
@@ -669,7 +734,7 @@
                 <input
                   type="number"
                   required
-                  placeholder="Contoh: 150000"
+                  placeholder="150000"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-emerald-500"
@@ -720,7 +785,6 @@
                     <button
                       onClick={() => handleDeleteExpense(item.id)}
                       className="text-slate-400 hover:text-rose-400 text-xs transition"
-                      title="Hapus"
                     >
                       ✕
                     </button>
@@ -728,7 +792,7 @@
                 </div>
               ))}
               {expenses.length === 0 && (
-                <p className="text-center py-8 text-xs text-slate-400">Belum ada catatan pengeluaran.</p>
+                <p className="text-center py-8 text-xs text-slate-400">Belum ada pengeluaran kas.</p>
               )}
             </div>
           </div>
@@ -736,240 +800,53 @@
       );
     }
 
-    // MODAL INVOICE RESMI (PER ORANG / SPLIT BILL DUAAN)
-    function InvoiceModal({ bill, tenant, room, onClose }) {
-      if (!bill) return null;
+    // MODAL EDIT RINCIAN LENGKAP UTILITAS & TAMU (PER ORANG)
+    function UtilityModal({ bill, tenant, room, allTenantsInRoom, onClose, refresh }) {
+      const tenantCountInRoom = Math.max(1, allTenantsInRoom.length);
 
-      const occCount = Math.max(1, tenant?.occupant_count || 1);
-      const isDouble = occCount > 1;
+      // 1. Sewa Kamar Pokok
+      const [rentPortion, setRentPortion] = useState(bill.rent_amount || (room ? (room.monthly_price / tenantCountInRoom) : 0));
 
-      // Perhitungan Porsi Per Orang
-      const totalRoom = Number(bill.rent_amount) + Number(bill.utility_cost || 0);
-      const rentPerPerson = Math.round(Number(bill.rent_amount) / occCount);
-      const utilityPerPerson = Math.round(Number(bill.utility_cost || 0) / occCount);
-      const totalPerPerson = Math.round(totalRoom / occCount);
+      // 2. Listrik Kamar (Dibagi Rata)
+      const [roomElectricTotal, setRoomElectricTotal] = useState((bill.electric_cost || 0) * tenantCountInRoom);
+      const [electricSplit, setElectricSplit] = useState(bill.electric_cost || 0);
 
-      const isPaid = bill.payment_status === 'paid';
+      // 3. Air (Per Kepala/Orang)
+      const [waterCost, setWaterCost] = useState(bill.water_cost || 30000);
 
-      // Format Nomor Invoice
-      const invoiceNumber = `INV-${bill.billing_month.replace(/-/g, '').substring(0, 6)}-${room?.room_number || 'X'}${isDouble ? '-P1' : ''}`;
+      // 4. Uang Sampah (Dibagi Rata Kamar)
+      const [wasteCost, setWasteCost] = useState(bill.waste_cost || (25000 / tenantCountInRoom));
 
-      const handlePrint = () => {
-        window.print();
-      };
-
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="relative max-w-xl w-full my-6">
-            {/* Tombol Aksi di Atas (Tidak ikut dicetak) */}
-            <div className="flex justify-between items-center mb-3 no-print">
-              <span className="text-xs text-slate-400">
-                Pratinjau Nota Faktur {isDouble ? '(Porsi Per Orang)' : ''}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={handlePrint}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 transition"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                  </svg>
-                  Cetak / Simpan PDF
-                </button>
-                <button
-                  onClick={onClose}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-
-            {/* LEMBAR KERTAS INVOICE (PUTIH BERSIH) */}
-            <div id="invoice-printable" className="bg-white text-slate-900 rounded-3xl p-8 sm:p-10 shadow-2xl border border-slate-200">
-              {/* Header Invoice */}
-              <div className="flex justify-between items-start border-b border-slate-200 pb-6">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-7 h-7 bg-emerald-600 text-white font-black rounded-lg flex items-center justify-center text-sm">
-                      P
-                    </div>
-                    <h2 className="text-xl font-black text-slate-900 tracking-tight">PLAWA KOST</h2>
-                  </div>
-                  <p className="text-xs text-slate-500">Jl. Plawa, Denpasar, Bali</p>
-                  <p className="text-xs text-slate-500">WhatsApp Pengelola: 0812-XXXX-XXXX</p>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-xs font-extrabold text-emerald-600 uppercase tracking-widest block">
-                    INVOICE SEWA {isDouble ? '(SPLIT BILL)' : ''}
-                  </span>
-                  <p className="text-sm font-bold text-slate-800 mt-1">{invoiceNumber}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Periode: {bill.billing_month}</p>
-                </div>
-              </div>
-
-              {/* Info Penghuni & Status Cap */}
-              <div className="grid grid-cols-2 gap-4 py-6 border-b border-slate-100 text-xs">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ditagihkan Kepada</span>
-                  <p className="text-sm font-bold text-slate-900">{tenant?.full_name || '-'}</p>
-                  <p className="text-slate-600 mt-0.5">
-                    Kamar {room?.room_number} • {isDouble ? 'Double (Porsi 1 dari 2 Orang)' : 'Single (1 Orang)'}
-                  </p>
-                  <p className="text-slate-500 mt-0.5">{tenant?.phone || '-'}</p>
-                </div>
-
-                <div className="flex flex-col items-end justify-center">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Status Pembayaran</span>
-                  <div className={`text-center px-4 py-1.5 rounded-xl border-2 font-black text-xs tracking-wider uppercase ${
-                    isPaid 
-                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50' 
-                      : 'border-rose-500 text-rose-600 bg-rose-50'
-                  }`}>
-                    {isPaid ? 'LUNAS' : 'BELUM DIBAYAR'}
-                  </div>
-                  {isPaid && bill.paid_at && (
-                    <span className="text-[10px] text-slate-400 mt-1">
-                      Tgl: {new Date(bill.paid_at).toLocaleDateString('id-ID')}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Tabel Rincian */}
-              <div className="py-6">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="pb-3">Keterangan Biaya</th>
-                      <th className="pb-3 text-right">Subtotal Porsi Anda</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    <tr>
-                      <td className="py-3">
-                        <p className="font-bold text-slate-800">Sewa Kamar {room?.room_number}</p>
-                        <p className="text-[11px] text-slate-500">
-                          {isDouble 
-                            ? `Total sewa Rp ${Number(bill.rent_amount).toLocaleString('id-ID')} ÷ 2 orang` 
-                            : 'Sewa bulanan unit kost'}
-                        </p>
-                      </td>
-                      <td className="py-3 text-right font-semibold text-slate-800">
-                        Rp {rentPerPerson.toLocaleString('id-ID')}
-                      </td>
-                    </tr>
-
-                    {bill.utility_cost > 0 && (
-                      <tr>
-                        <td className="py-3">
-                          <p className="font-bold text-slate-800">Biaya Utilitas (Listrik & Air)</p>
-                          <p className="text-[11px] text-slate-500 italic leading-relaxed">
-                            {isDouble 
-                              ? `Total utilitas Rp ${Number(bill.utility_cost).toLocaleString('id-ID')} ÷ 2 orang (${bill.notes})` 
-                              : (bill.notes || 'Biaya meteran listrik dan iuran air')}
-                          </p>
-                        </td>
-                        <td className="py-3 text-right font-semibold text-slate-800">
-                          Rp {utilityPerPerson.toLocaleString('id-ID')}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-slate-900 text-sm">
-                      <th className="pt-4 font-black text-slate-900 uppercase">
-                        {isDouble ? 'Total Tagihan Per Orang' : 'Total Tagihan'}
-                      </th>
-                      <th className="pt-4 text-right font-black text-emerald-600 text-base">
-                        Rp {totalPerPerson.toLocaleString('id-ID')}
-                      </th>
-                    </tr>
-                    {isDouble && (
-                      <tr>
-                        <td colSpan="2" className="text-right text-[11px] text-slate-400 pt-1 font-normal italic">
-                          *Total keseluruhan 1 kamar (gabungan berdua): Rp {totalRoom.toLocaleString('id-ID')}
-                        </td>
-                      </tr>
-                    )}
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Petunjuk Pembayaran & Catatan */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs space-y-1 mt-2">
-                <p className="font-bold text-slate-800">Instruksi Pembayaran:</p>
-                <p className="text-slate-600">• Bank BCA: <span className="font-bold text-slate-800">1234-567-890</span> a/n Pengelola Plawa Kost</p>
-                <p className="text-slate-600">• Harap simpan dan kirimkan bukti transfer ke nomor WhatsApp pengelola setelah pembayaran.</p>
-              </div>
-
-              {/* Footer Tanda Tangan */}
-              <div className="mt-8 pt-4 flex justify-between items-end text-xs text-slate-400">
-                <div>
-                  <p>Terima kasih atas kerjasamanya.</p>
-                  <p className="text-[10px]">Dicetak secara otomatis melalui Plawa Kost System</p>
-                </div>
-                <div className="text-center w-36">
-                  <div className="h-12"></div>
-                  <p className="font-bold text-slate-800 border-t border-slate-300 pt-1">Pengelola Kost</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // MODAL UTILITAS: LOGIKA LISTRIK PER KAMAR + AIR PER KEPALA
-    function UtilityModal({ bill, tenant, room, onClose, refresh }) {
-      const [electricMode, setElectricMode] = useState('meter');
-      const [elPrev, setElPrev] = useState(0);
-      const [elCurr, setElCurr] = useState(0);
-      const [elRate, setElRate] = useState(2500);
-      const [elFlatPrice, setElFlatPrice] = useState(100000);
-
-      const initialPeople = tenant?.occupant_count || 1;
-      const [peopleCount, setPeopleCount] = useState(initialPeople);
-      const [waterRatePerPerson, setWaterRatePerPerson] = useState(30000);
-      const [includeWater, setIncludeWater] = useState(true);
+      // 5. Tambahan Tamu / Non-Penyewa (Air + Listrik Tamu)
+      const [extraGuestCost, setExtraGuestCost] = useState(bill.extra_guest_cost || 0);
 
       const [saving, setSaving] = useState(false);
 
-      const elUsage = Math.max(0, elCurr - elPrev);
-      const elCost = electricMode === 'meter' 
-        ? (elUsage * elRate) 
-        : (electricMode === 'flat' ? Number(elFlatPrice) : 0);
+      // Hitung pembagian listrik per orang saat total listrik kamar diubah
+      const handleRoomElectricChange = (val) => {
+        setRoomElectricTotal(val);
+        setElectricSplit(Math.round(val / tenantCountInRoom));
+      };
 
-      const waterTotalCost = includeWater ? (Number(peopleCount) * Number(waterRatePerPerson)) : 0;
-      const totalUtility = elCost + waterTotalCost;
+      const totalInvoice = Number(rentPortion) + Number(electricSplit) + Number(waterCost) + Number(wasteCost) + Number(extraGuestCost);
 
       const handleSave = async (e) => {
         e.preventDefault();
         setSaving(true);
         try {
-          const breakdown = [];
-          if (electricMode === 'meter' && elCost > 0) {
-            breakdown.push(`Listrik: ${elUsage} kWh @Rp${elRate} = Rp ${elCost.toLocaleString('id-ID')}`);
-          } else if (electricMode === 'flat' && elCost > 0) {
-            breakdown.push(`Listrik: Flat Rp ${elCost.toLocaleString('id-ID')}`);
-          }
-
-          if (includeWater && waterTotalCost > 0) {
-            breakdown.push(`Air: ${peopleCount} Jiwa @Rp${Number(waterRatePerPerson).toLocaleString('id-ID')} = Rp ${waterTotalCost.toLocaleString('id-ID')}`);
-          }
-
-          const notesString = breakdown.join(' | ') || 'Tanpa biaya tambahan';
-
           await db.from('bills').update({
-            utility_cost: totalUtility,
-            notes: notesString
+            rent_amount: Number(rentPortion),
+            electric_cost: Number(electricSplit),
+            water_cost: Number(waterCost),
+            waste_cost: Number(wasteCost),
+            extra_guest_cost: Number(extraGuestCost),
+            utility_cost: Number(electricSplit) + Number(waterCost) + Number(wasteCost) + Number(extraGuestCost)
           }).eq('id', bill.id);
 
           refresh();
           onClose();
         } catch (err) {
-          alert('Gagal menyimpan utilitas: ' + err.message);
+          alert('Gagal menyimpan rincian invoice: ' + err.message);
         } finally {
           setSaving(false);
         }
@@ -978,143 +855,92 @@
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 shadow-2xl my-6">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-100">Kalkulator Utilitas</h3>
-                <p className="text-[11px] text-slate-400">
-                  Kamar {room?.room_number} • {tenant?.full_name} ({peopleCount} Penghuni)
-                </p>
-              </div>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                peopleCount > 1 ? 'bg-purple-950 text-purple-300 border border-purple-800/40' : 'bg-slate-800 text-slate-400'
-              }`}>
-                {peopleCount > 1 ? 'Double' : 'Single'}
-              </span>
+            <div className="mb-3">
+              <h3 className="text-sm font-bold text-slate-100">Atur Rincian Invoice</h3>
+              <p className="text-[11px] text-slate-400">
+                {tenant?.full_name} • Kamar {room?.room_number} ({tenantCountInRoom} Orang di kamar ini)
+              </p>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4">
-              {/* LISTRIK */}
-              <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
-                    ⚡ Listrik (Per Kamar)
-                  </span>
-                  <select
-                    value={electricMode}
-                    onChange={(e) => setElectricMode(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 text-slate-300 rounded-lg text-[10px] px-2 py-1"
-                  >
-                    <option value="meter">Meteran kWh</option>
-                    <option value="flat">Tarif Flat</option>
-                    <option value="none">Gratis/Tidak Ada</option>
-                  </select>
-                </div>
+            <form onSubmit={handleSave} className="space-y-3">
+              {/* Sewa Pokok */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">Sewa Kamar (Porsi Orang Ini)</label>
+                <input
+                  type="number"
+                  value={rentPortion}
+                  onChange={(e) => setRentPortion(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                />
+              </div>
 
-                {electricMode === 'meter' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Meter Awal</label>
-                        <input
-                          type="number"
-                          value={elPrev}
-                          onChange={(e) => setElPrev(Number(e.target.value))}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Meter Akhir</label>
-                        <input
-                          type="number"
-                          value={elCurr}
-                          onChange={(e) => setElCurr(Number(e.target.value))}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center text-[11px]">
-                      <span className="text-slate-400">Tarif / kWh:</span>
-                      <input
-                        type="number"
-                        value={elRate}
-                        onChange={(e) => setElRate(Number(e.target.value))}
-                        className="w-24 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-right text-xs text-slate-200"
-                      />
-                    </div>
-                    <div className="text-[11px] flex justify-between font-medium text-slate-300 border-t border-slate-800/80 pt-1">
-                      <span>Pemakaian: {elUsage} kWh</span>
-                      <span className="text-sky-400 font-bold">Rp {elCost.toLocaleString('id-ID')}</span>
-                    </div>
-                  </>
-                )}
-
-                {electricMode === 'flat' && (
-                  <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-slate-400">Biaya Listrik Flat / Kamar:</span>
+              {/* Listrik Kamar */}
+              <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800 space-y-1.5">
+                <span className="text-[11px] font-bold text-sky-400">⚡ Listrik Kamar (Dibagi {tenantCountInRoom} Orang)</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-slate-400 block mb-0.5">Total Listrik Kamar</label>
                     <input
                       type="number"
-                      value={elFlatPrice}
-                      onChange={(e) => setElFlatPrice(Number(e.target.value))}
-                      className="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-right text-xs text-slate-200"
+                      value={roomElectricTotal}
+                      onChange={(e) => handleRoomElectricChange(Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
                     />
                   </div>
-                )}
-              </div>
-
-              {/* AIR */}
-              <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-teal-400 flex items-center gap-1.5">
-                    💧 Air (Dihitung Per Orang)
-                  </span>
-                  <label className="text-[10px] text-slate-400 flex items-center gap-1 cursor-pointer">
+                  <div>
+                    <label className="text-[9px] text-slate-400 block mb-0.5">Porsi per Orang</label>
                     <input
-                      type="checkbox"
-                      checked={includeWater}
-                      onChange={(e) => setIncludeWater(e.target.checked)}
-                      className="rounded accent-teal-500"
+                      type="number"
+                      value={electricSplit}
+                      onChange={(e) => setElectricSplit(Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-sky-300 font-bold"
                     />
-                    Aktifkan
-                  </label>
+                  </div>
                 </div>
-
-                {includeWater && (
-                  <>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Jumlah Orang</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="4"
-                          value={peopleCount}
-                          onChange={(e) => setPeopleCount(Number(e.target.value))}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Tarif / Orang (Rp)</label>
-                        <input
-                          type="number"
-                          value={waterRatePerPerson}
-                          onChange={(e) => setWaterRatePerPerson(Number(e.target.value))}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-                        />
-                      </div>
-                    </div>
-                    <div className="text-[11px] flex justify-between font-medium text-slate-300 border-t border-slate-800/80 pt-1">
-                      <span>{peopleCount} orang × Rp {Number(waterRatePerPerson).toLocaleString('id-ID')}</span>
-                      <span className="text-teal-400 font-bold">Rp {waterTotalCost.toLocaleString('id-ID')}</span>
-                    </div>
-                  </>
-                )}
               </div>
 
-              {/* TOTAL AKHIR */}
-              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-300">Total Utilitas Kamar:</span>
+              {/* Air Per Orang & Sampah */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-teal-400 block mb-1">💧 Air (Per Orang)</label>
+                  <input
+                    type="number"
+                    value={waterCost}
+                    onChange={(e) => setWaterCost(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">🗑️ Uang Sampah</label>
+                  <input
+                    type="number"
+                    value={wasteCost}
+                    onChange={(e) => setWasteCost(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
+                  />
+                </div>
+              </div>
+
+              {/* Tambahan Tamu / Non-Penyewa */}
+              <div className="bg-amber-950/20 border border-amber-900/40 p-2.5 rounded-xl">
+                <label className="text-[10px] font-bold text-amber-300 block mb-1">
+                  👤 Tambahan Tamu / Non-Penyewa
+                </label>
+                <input
+                  type="number"
+                  placeholder="0 jika tidak ada tamu"
+                  value={extraGuestCost}
+                  onChange={(e) => setExtraGuestCost(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-amber-200"
+                />
+                <span className="text-[9px] text-slate-400 mt-0.5 block">Biaya ekstra air & listrik jika ada tamu menginap</span>
+              </div>
+
+              {/* Total Invoice */}
+              <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-xl flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-300">Total Invoice Individu:</span>
                 <span className="text-sm font-black text-emerald-400">
-                  Rp {totalUtility.toLocaleString('id-ID')}
+                  Rp {totalInvoice.toLocaleString('id-ID')}
                 </span>
               </div>
 
@@ -1129,9 +955,9 @@
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition"
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl"
                 >
-                  {saving ? 'Menyimpan...' : 'Terapkan ke Tagihan'}
+                  {saving ? 'Menyimpan...' : 'Simpan Invoice'}
                 </button>
               </div>
             </form>
@@ -1140,7 +966,120 @@
       );
     }
 
-    // MODAL TAMBAH UNIT
+    // MODAL TAMBAH TIKET KOMPLAIN
+    function AddComplaintModal({ rooms, tenants, onClose, refresh }) {
+      const [roomId, setRoomId] = useState(rooms[0]?.id || '');
+      const [tenantId, setTenantId] = useState('');
+      const [title, setTitle] = useState('');
+      const [category, setCategory] = useState('fasilitas');
+      const [description, setDescription] = useState('');
+      const [saving, setSaving] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+          await db.from('complaints').insert([{
+            room_id: roomId,
+            tenant_id: tenantId || null,
+            title,
+            category,
+            description,
+            status: 'pending'
+          }]);
+          refresh();
+          onClose();
+        } catch (err) {
+          alert('Gagal membuat tiket: ' + err.message);
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      const roomTenants = tenants.filter(t => t.room_id === roomId);
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
+            <h3 className="text-sm font-bold text-slate-100 mb-3">Buat Tiket Komplain / Perbaikan</h3>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Pilih Kamar</label>
+                <select
+                  value={roomId}
+                  onChange={(e) => {
+                    setRoomId(e.target.value);
+                    setTenantId('');
+                  }}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200"
+                  required
+                >
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>Kamar {r.room_number}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Penghuni Pelapor (Opsional)</label>
+                <select
+                  value={tenantId}
+                  onChange={(e) => setTenantId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200"
+                >
+                  <option value="">-- Pilih Penghuni --</option>
+                  {roomTenants.map((t) => (
+                    <option key={t.id} value={t.id}>{t.full_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Judul Keluhan</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Misal: AC tidak dingin / Kran bocor"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Rincian Keluhan</label>
+                <textarea
+                  rows="3"
+                  placeholder="Penjelasan kerusakan lebih detail..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl"
+                >
+                  {saving ? 'Menyimpan...' : 'Kirim Tiket'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // MODAL TAMBAH UNIT KAMAR
     function AddRoomModal({ onClose, refresh }) {
       const [roomNumber, setRoomNumber] = useState('');
       const [price, setPrice] = useState('700000');
@@ -1167,7 +1106,7 @@
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
-            <h3 className="text-sm font-bold text-slate-100 mb-3">Tambah Unit Kamar</h3>
+            <h3 className="text-sm font-bold text-slate-100 mb-3">Tambah Kamar Baru</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-slate-400 block mb-1">Nomor / Nama Kamar</label>
@@ -1212,12 +1151,11 @@
       );
     }
 
-    // MODAL CHECK-IN
+    // MODAL CHECK-IN PENGHUNI INDIVIDU
     function AddTenantModal({ rooms, onClose, refresh }) {
       const [roomId, setRoomId] = useState(rooms[0]?.id || '');
       const [fullName, setFullName] = useState('');
       const [phone, setPhone] = useState('');
-      const [occupantCount, setOccupantCount] = useState(1);
       const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
       const [dueDay, setDueDay] = useState(new Date().getDate());
       const [saving, setSaving] = useState(false);
@@ -1229,18 +1167,20 @@
         try {
           const selectedRoom = rooms.find(r => r.id === roomId);
 
+          // 1. Simpan Penghuni
           const { data: tenant, error: tErr } = await db.from('tenants').insert([{
             room_id: roomId,
             full_name: fullName,
             phone,
-            occupant_count: parseInt(occupantCount),
             entry_date: entryDate,
             due_day: parseInt(dueDay)
           }]).select().single();
           if (tErr) throw tErr;
 
+          // 2. Tandai Kamar Terisi
           await db.from('rooms').update({ status: 'occupied' }).eq('id', roomId);
 
+          // 3. Terbitkan invoice bulan pertama untuk individu ini
           const billingMonth = new Date(entryDate);
           billingMonth.setDate(1);
 
@@ -1249,9 +1189,12 @@
             room_id: roomId,
             billing_month: billingMonth.toISOString().split('T')[0],
             rent_amount: selectedRoom.monthly_price,
-            utility_cost: 0,
+            electric_cost: 0,
+            water_cost: 30000,
+            waste_cost: 25000,
+            extra_guest_cost: 0,
             payment_status: 'unpaid',
-            notes: `Tagihan bulan pertama (${occupantCount > 1 ? 'Double / 2 Orang' : 'Single / 1 Orang'})`
+            notes: 'Invoice pertama penghuni baru'
           }]);
 
           refresh();
@@ -1269,14 +1212,13 @@
             <h3 className="text-sm font-bold text-slate-100 mb-3">Check-In Penghuni Baru</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="text-[11px] font-bold text-slate-400 block mb-1">Pilih Kamar Kosong</label>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Pilih Kamar</label>
                 <select
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-emerald-500"
                   required
                 >
-                  <option value="">-- Pilih Kamar --</option>
                   {rooms.map((r) => (
                     <option key={r.id} value={r.id}>
                       Kamar {r.room_number} - Rp {Number(r.monthly_price).toLocaleString('id-ID')}
@@ -1286,23 +1228,11 @@
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-400 block mb-1">Tipe Hunian</label>
-                <select
-                  value={occupantCount}
-                  onChange={(e) => setOccupantCount(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-emerald-500"
-                >
-                  <option value={1}>1 Orang (Single)</option>
-                  <option value={2}>2 Orang (Double - Tagihan Dibagi Dua)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-slate-400 block mb-1">Nama Penyewa</label>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Nama Penghuni</label>
                 <input
                   type="text"
                   required
-                  placeholder="Nama lengkap penghuni"
+                  placeholder="Nama lengkap"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-emerald-500"
