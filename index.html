@@ -438,9 +438,47 @@
       );
     }
 
-    // 3. TAB INVOICE PENGHUNI
+    // 3. TAB INVOICE PENGHUNI (DENGAN FILTER BULAN & RINGKASAN PEMBUKUAN)
     function BillingView({ bills, tenants, rooms, onOpenUtility, onOpenPayment, onViewProof, onPreviewInvoice, refresh }) {
       const [generating, setGenerating] = useState(false);
+      const [selectedMonth, setSelectedMonth] = useState('all');
+
+      // Ambil daftar bulan unik (format YYYY-MM) dari data bills
+      const availableMonths = Array.from(
+        new Set(
+          bills
+            .map(b => b.billing_month ? b.billing_month.slice(0, 7) : null)
+            .filter(Boolean)
+        )
+      ).sort().reverse();
+
+      // Format string "2026-10" menjadi "Oktober 2026"
+      const formatMonthLabel = (ym) => {
+        if (!ym) return '-';
+        const [year, month] = ym.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      };
+
+      // Filter daftar invoice berdasarkan pilihan bulan
+      const filteredBills = selectedMonth === 'all'
+        ? bills
+        : bills.filter(b => b.billing_month && b.billing_month.startsWith(selectedMonth));
+
+      // Hitung ringkasan keuangan berdasarkan invoice yang terfilter
+      const totalFilteredAmount = filteredBills.reduce((acc, b) => {
+        const sub = Number(b.rent_amount || 0) + Number(b.electric_cost || 0) + Number(b.water_cost || 0) + Number(b.waste_cost || 0) + Number(b.extra_guest_cost || 0);
+        return acc + sub;
+      }, 0);
+
+      const paidFilteredAmount = filteredBills
+        .filter(b => b.payment_status === 'paid')
+        .reduce((acc, b) => {
+          const sub = Number(b.rent_amount || 0) + Number(b.electric_cost || 0) + Number(b.water_cost || 0) + Number(b.waste_cost || 0) + Number(b.extra_guest_cost || 0);
+          return acc + sub;
+        }, 0);
+
+      const unpaidFilteredAmount = totalFilteredAmount - paidFilteredAmount;
 
       const handleGenerateMonthlyBills = async () => {
         const today = new Date();
@@ -520,26 +558,65 @@
 
       return (
         <div className="space-y-4">
+          {/* Header & Filter Bulan */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h2 className="text-lg font-bold text-slate-100">Invoice Tagihan Per Orang</h2>
-              <p className="text-xs text-slate-400">Rincian sewa, utilitas, preview nota, & bukti bayar</p>
+              <p className="text-xs text-slate-400">Rincian sewa, utilitas, preview nota, & filter periode</p>
             </div>
-            <button
-              onClick={handleGenerateMonthlyBills}
-              disabled={generating}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-sm"
-            >
-              {generating ? 'Menerbitkan...' : '+ Terbitkan Invoice Bulan Baru'}
-            </button>
+            
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Dropdown Filter Bulan */}
+              <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-xl px-2.5 py-1.5">
+                <span className="text-[11px] text-slate-400">📅 Bulan:</span>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-transparent text-xs text-slate-200 font-semibold focus:outline-none cursor-pointer"
+                >
+                  <option value="all" className="bg-slate-900">Semua Bulan</option>
+                  {availableMonths.map((ym) => (
+                    <option key={ym} value={ym} className="bg-slate-900">
+                      {formatMonthLabel(ym)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={handleGenerateMonthlyBills}
+                disabled={generating}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3 py-1.5 rounded-xl transition shadow-sm"
+              >
+                {generating ? 'Menerbitkan...' : '+ Terbitkan Bulan Baru'}
+              </button>
+            </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          {/* Kartu Ringkasan Pembukuan Invoice (Filtered) */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-900 border border-slate-800/80 p-3.5 rounded-2xl">
+              <span className="text-[11px] text-slate-400 font-medium">Total Tagihan ({selectedMonth === 'all' ? 'Semua' : formatMonthLabel(selectedMonth)})</span>
+              <p className="text-lg font-bold text-slate-200 mt-0.5">Rp {totalFilteredAmount.toLocaleString('id-ID')}</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800/80 p-3.5 rounded-2xl">
+              <span className="text-[11px] text-slate-400 font-medium">Sudah Lunas</span>
+              <p className="text-lg font-bold text-emerald-400 mt-0.5">Rp {paidFilteredAmount.toLocaleString('id-ID')}</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800/80 p-3.5 rounded-2xl">
+              <span className="text-[11px] text-slate-400 font-medium">Belum Bayar</span>
+              <p className="text-lg font-bold text-amber-400 mt-0.5">Rp {unpaidFilteredAmount.toLocaleString('id-ID')}</p>
+            </div>
+          </div>
+
+          {/* Tabel Invoice */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950/60 border-b border-slate-800 text-slate-400 uppercase font-semibold text-[10px]">
                   <tr>
                     <th className="px-3 py-3">Penghuni & Kamar</th>
+                    <th className="px-3 py-3">Bulan</th>
                     <th className="px-3 py-3">Sewa</th>
                     <th className="px-3 py-3">Listrik</th>
                     <th className="px-3 py-3">Air</th>
@@ -552,7 +629,7 @@
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {bills.map((b) => {
+                  {filteredBills.map((b) => {
                     const room = rooms.find(r => r.id === b.room_id);
                     const tenant = tenants.find(t => t.id === b.tenant_id);
                     const isPaid = b.payment_status === 'paid';
@@ -571,6 +648,9 @@
                         <td className="px-3 py-3">
                           <p className="font-bold text-slate-100">{tenant?.full_name || '-'}</p>
                           <span className="text-[10px] text-slate-400">Kamar {room?.room_number || '-'}</span>
+                        </td>
+                        <td className="px-3 py-3 text-slate-300 font-mono text-[11px] whitespace-nowrap">
+                          {b.billing_month ? b.billing_month.slice(0, 7) : '-'}
                         </td>
                         <td className="px-3 py-3 text-slate-400">Rp {rent.toLocaleString('id-ID')}</td>
                         <td className="px-3 py-3 text-sky-400">Rp {electric.toLocaleString('id-ID')}</td>
@@ -650,9 +730,11 @@
                       </tr>
                     );
                   })}
-                  {bills.length === 0 && (
+                  {filteredBills.length === 0 && (
                     <tr>
-                      <td colSpan="10" className="text-center py-10 text-slate-400">Belum ada invoice diterbitkan.</td>
+                      <td colSpan="11" className="text-center py-10 text-slate-400">
+                        Tidak ada invoice untuk filter bulan ini.
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -887,7 +969,7 @@
       );
     }
 
-    // MODAL PREVIEW INVOICE (LENGKAP DENGAN KOLOM TANDA TANGAN 2 PIHAK)
+    // MODAL PREVIEW INVOICE (LENGKAP DENGAN TANDA TANGAN 2 PIHAK)
     function InvoicePreviewModal({ bill, tenant, room, onClose }) {
       const rent = Number(bill.rent_amount || 0);
       const electric = Number(bill.electric_cost || 0);
@@ -1055,7 +1137,7 @@
       );
     }
 
-    // MODAL KONFIRMASI PEMBAYARAN & UPLOAD BUKTI TF (SUDAH DIPERBAIKI: BEBAS ERROR REFERENCEERROR)
+    // MODAL KONFIRMASI PEMBAYARAN & UPLOAD BUKTI TF
     function PaymentModal({ bill, tenant, room, onClose, refresh }) {
       const [method, setMethod] = useState(bill.payment_method || 'transfer');
       const [status, setStatus] = useState(bill.payment_status || 'paid');
@@ -1063,7 +1145,6 @@
       const [previewUrl, setPreviewUrl] = useState(bill.proof_url || null);
       const [saving, setSaving] = useState(false);
 
-      // Hitung total aman dari object bill
       const total = Number(bill.rent_amount || 0) + 
                     Number(bill.electric_cost || 0) + 
                     Number(bill.water_cost || 0) + 
