@@ -616,6 +616,7 @@
                         </td>
 
                         <td className="px-3 py-3 text-right space-x-1 whitespace-nowrap">
+                          {/* Tombol Preview Invoice */}
                           <button
                             onClick={() => onPreviewInvoice(b)}
                             title="Preview Nota Invoice"
@@ -1008,7 +1009,9 @@
                   <div>
                     <p className="text-[10px] text-slate-400 font-medium">Penyewa / Penghuni</p>
                     <div className="h-14 flex items-center justify-center">
-                      {/* Ruang paraf / tanda tangan */}
+                      {bill.signature_url ? (
+                        <img src={bill.signature_url} alt="Tanda Tangan Penghuni" className="max-h-12 object-contain" />
+                      ) : null}
                     </div>
                     <div className="border-t border-slate-700/80 pt-1 mx-2">
                       <p className="font-bold text-slate-200 text-xs truncate">
@@ -1020,7 +1023,7 @@
                   <div>
                     <p className="text-[10px] text-slate-400 font-medium">Pengelola Plawa Kost</p>
                     <div className="h-14 flex items-center justify-center">
-                      {/* Ruang paraf / tanda tangan */}
+                      {/* Ruang paraf pengelola */}
                     </div>
                     <div className="border-t border-slate-700/80 pt-1 mx-2">
                       <p className="font-bold text-slate-200 text-xs">
@@ -1052,7 +1055,7 @@
       );
     }
 
-    // MODAL KONFIRMASI PEMBAYARAN & UPLOAD BUKTI TF
+    // MODAL KONFIRMASI PEMBAYARAN & UPLOAD BUKTI TF (SUDAH DIPERBAIKI: BEBAS ERROR REFERENCEERROR)
     function PaymentModal({ bill, tenant, room, onClose, refresh }) {
       const [method, setMethod] = useState(bill.payment_method || 'transfer');
       const [status, setStatus] = useState(bill.payment_status || 'paid');
@@ -1060,7 +1063,12 @@
       const [previewUrl, setPreviewUrl] = useState(bill.proof_url || null);
       const [saving, setSaving] = useState(false);
 
-      const total = Number(bill.rent_amount || 0) + Number(bill.electric_cost || 0) + Number(bill.water_cost || 0) + Number(bill.waste_cost || 0) + Number(extraGuestCost || 0);
+      // Hitung total aman dari object bill
+      const total = Number(bill.rent_amount || 0) + 
+                    Number(bill.electric_cost || 0) + 
+                    Number(bill.water_cost || 0) + 
+                    Number(bill.waste_cost || 0) + 
+                    Number(bill.extra_guest_cost || 0);
 
       const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -1128,9 +1136,7 @@
             <form onSubmit={handleSave} className="space-y-3.5">
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
                 <span className="text-xs text-slate-400">Total Tagihan:</span>
-                <span className="text-sm font-bold text-emerald-400">
-                  Rp {(Number(bill.rent_amount || 0) + Number(bill.electric_cost || 0) + Number(bill.water_cost || 0) + Number(bill.waste_cost || 0) + Number(bill.extra_guest_cost || 0)).toLocaleString('id-ID')}
-                </span>
+                <span className="text-sm font-bold text-emerald-400">Rp {total.toLocaleString('id-ID')}</span>
               </div>
 
               <div>
@@ -1362,7 +1368,7 @@
                       placeholder="0"
                       value={roomElectricTotal}
                       onChange={(e) => handleRoomElectricChange(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
                     />
                   </div>
                   <div>
@@ -1372,7 +1378,7 @@
                       placeholder="0"
                       value={electricSplit}
                       onChange={(e) => setElectricSplit(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-sky-300 font-bold"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-sky-300 font-bold"
                     />
                   </div>
                 </div>
@@ -1389,7 +1395,7 @@
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">🗑️️ Uang Sampah</label>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1">🗑️ Uang Sampah</label>
                   <input
                     type="number"
                     value={wasteCost}
