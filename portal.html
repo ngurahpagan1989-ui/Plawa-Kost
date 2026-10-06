@@ -18,14 +18,13 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     // Supabase Client
     const SUPABASE_URL = 'https://oqqrarwwbhxdpocaerog.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcXJhcnd3Ymh4ZHBvY2Flcm9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDI1NDksImV4cCI6MjEwNjY3ODU0OX0.XHVPjy01DZHo5uKhGZyClA-Jr6nKeqQi4FajatbSZKI';
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Kredensial Pembayaran Pemilik Kost
     const KOST_PAYMENT_INFO = {
       bankName: 'BCA',
       accountNumber: '1234-5678-90',
@@ -41,18 +40,20 @@
       const [loading, setLoading] = useState(true);
       const [error, setError] = useState(null);
 
-      const [activeTab, setActiveTab] = useState('bills'); // 'bills' | 'complaint' | 'info'
+      const [activeTab, setActiveTab] = useState('bills');
       const [newTitle, setNewTitle] = useState('');
       const [newDesc, setNewDesc] = useState('');
       const [savingComplaint, setSavingComplaint] = useState(false);
 
-      // Baca Token ID Penghuni dari Parameter URL (?id=...)
+      // Modal Form Konfirmasi Bayar & Tanda Tangan
+      const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
       useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const tenantId = params.get('id');
 
         if (!tenantId) {
-          setError('Tautan portal tidak valid atau token akses tidak ditemukan.');
+          setError('Tautan portal tidak valid atau ID penghuni tidak ditemukan.');
           setLoading(false);
           return;
         }
@@ -62,7 +63,6 @@
 
       const loadTenantData = async (tenantId) => {
         try {
-          // 1. Ambil data penghuni
           const { data: tenantData, error: tErr } = await db
             .from('tenants')
             .select('*')
@@ -72,7 +72,6 @@
           if (tErr || !tenantData) throw new Error('Data penghuni tidak ditemukan di database.');
           setTenant(tenantData);
 
-          // 2. Ambil data kamar, tagihan, dan tiket keluhan secara bersamaan
           const [roomRes, billsRes, complaintsRes] = await Promise.all([
             db.from('rooms').select('*').eq('id', tenantData.room_id).single(),
             db.from('bills').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }),
@@ -129,7 +128,7 @@
               </div>
               <h2 className="text-base font-bold text-slate-100">Akses Ditolak</h2>
               <p className="text-xs text-slate-400 leading-relaxed">{error}</p>
-              <p className="text-[11px] text-slate-500">Silakan hubungi pengelola kost untuk mendapatkan tautan akses resmi.</p>
+              <p className="text-[11px] text-slate-500">Silakan hubungi pengelola kost untuk tautan resmi.</p>
             </div>
           </div>
         );
@@ -144,11 +143,6 @@
       const waste = Number(latestBill?.waste_cost || 0);
       const extra = Number(latestBill?.extra_guest_cost || 0);
       const totalAmount = rent + electric + water + waste + extra;
-
-      const handleConfirmPaymentViaWA = () => {
-        const text = `Halo Pengelola Plawa Kost, saya *${tenant.full_name}* (Kamar *${room?.room_number}*) ingin mengonfirmasi pembayaran tagihan sebesar *Rp ${totalAmount.toLocaleString('id-ID')}*. Berikut bukti transfer saya:`;
-        window.open(`https://wa.me/${KOST_PAYMENT_INFO.ownerWa}?text=${encodeURIComponent(text)}`, '_blank');
-      };
 
       return (
         <div className="min-h-screen bg-slate-950 text-slate-200 p-4 sm:p-6 max-w-xl mx-auto space-y-5">
@@ -238,25 +232,43 @@
                     </span>
                   </div>
 
-                  {/* Rekening Pembayaran */}
-                  {!isPaid && (
-                    <div className="bg-slate-950/80 border border-slate-800/80 p-4 rounded-2xl space-y-3">
-                      <p className="text-[11px] text-slate-400 font-medium">Rekening Pembayaran Kost:</p>
-                      <div className="flex justify-between items-center bg-slate-900 px-3 py-2 rounded-xl">
+                  {/* Tanda Tangan & Bukti yang sudah tersimpan */}
+                  {(latestBill.signature_url || latestBill.proof_url) && (
+                    <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-2xl grid grid-cols-2 gap-3 text-[11px]">
+                      {latestBill.proof_url && (
                         <div>
-                          <p className="text-xs font-bold text-slate-200">{KOST_PAYMENT_INFO.bankName}: {KOST_PAYMENT_INFO.accountNumber}</p>
-                          <p className="text-[10px] text-slate-400">a/n {KOST_PAYMENT_INFO.accountHolder}</p>
+                          <span className="text-slate-400 block mb-1">Bukti Transfer:</span>
+                          <a href={latestBill.proof_url} target="_blank" rel="noreferrer" className="block max-h-20 overflow-hidden rounded-lg border border-slate-800">
+                            <img src={latestBill.proof_url} alt="Struk TF" className="object-cover w-full h-20" />
+                          </a>
                         </div>
-                      </div>
-
-                      <button
-                        onClick={handleConfirmPaymentViaWA}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition"
-                      >
-                        <span>Konfirmasi Pembayaran via WA</span>
-                      </button>
+                      )}
+                      {latestBill.signature_url && (
+                        <div>
+                          <span className="text-slate-400 block mb-1">Paraf / Tanda Tangan:</span>
+                          <div className="max-h-20 overflow-hidden rounded-lg border border-slate-800 bg-slate-900 flex items-center justify-center p-1">
+                            <img src={latestBill.signature_url} alt="Paraf Penghuni" className="max-h-16 object-contain" />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
+
+                  {/* Aksi Pembayaran */}
+                  <div className="bg-slate-950/80 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                    <p className="text-[11px] text-slate-400 font-medium">Rekening Tujuan Pembayaran:</p>
+                    <div className="bg-slate-900 px-3 py-2 rounded-xl text-xs">
+                      <p className="font-bold text-slate-200">{KOST_PAYMENT_INFO.bankName}: {KOST_PAYMENT_INFO.accountNumber}</p>
+                      <p className="text-[10px] text-slate-400">a/n {KOST_PAYMENT_INFO.accountHolder}</p>
+                    </div>
+
+                    <button
+                      onClick={() => setIsConfirmModalOpen(true)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-md shadow-emerald-950"
+                    >
+                      <span>✍️ Upload Bukti TF & Tanda Tangan</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl text-center text-slate-400 text-xs">
@@ -277,7 +289,7 @@
                     <input
                       type="text"
                       required
-                      placeholder="Misal: Kran kamar mandi bocor / AC tidak dingin"
+                      placeholder="Misal: Kran bocor / Lampu lorong mati"
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-emerald-500"
@@ -287,7 +299,7 @@
                     <label className="text-[10px] font-bold text-slate-400 block mb-1">Keterangan Tambahan</label>
                     <textarea
                       rows="2"
-                      placeholder="Penjelasan kerusakan agar dapat segera diperbaiki..."
+                      placeholder="Penjelasan kerusakan..."
                       value={newDesc}
                       onChange={(e) => setNewDesc(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-emerald-500"
@@ -331,26 +343,251 @@
           {activeTab === 'info' && (
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 text-xs">
               <h3 className="text-sm font-bold text-slate-100 border-b border-slate-800 pb-2">Informasi Umum Plawa Kost</h3>
-              
               <div className="space-y-3">
                 <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase">📶 Akses Internet WiFi</span>
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase">📶 Akses WiFi</span>
                   <p className="font-bold text-slate-200 mt-0.5">SSID: PlawaKost_Fast</p>
                   <p className="text-slate-400">Password: <code className="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200">plawa12345</code></p>
                 </div>
-
                 <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-sky-400 uppercase">🗑️ Pengambilan Sampah</span>
-                  <p className="text-slate-300 mt-0.5">Tiap hari Selasa & Jumat pagi. Mohon letakkan tempat sampah di depan kamar sebelum pukul 07.00.</p>
-                </div>
-
-                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-amber-400 uppercase">⚠️ Jam Tenang & Tamu</span>
-                  <p className="text-slate-300 mt-0.5">Jam tenang berlaku mulai pukul 22.00 WITA. Tamu yang menginap wajib melapor ke pengelola.</p>
+                  <span className="text-[10px] font-bold text-sky-400 uppercase">🗑️ Sampah Lingkungan</span>
+                  <p className="text-slate-300 mt-0.5">Pengambilan sampah dilakukan setiap Selasa & Jumat pagi.</p>
                 </div>
               </div>
             </div>
           )}
+
+          {/* MODAL UPLOAD BUKTI TF & TANDA TANGAN */}
+          {isConfirmModalOpen && latestBill && (
+            <TenantConfirmModal
+              bill={latestBill}
+              tenant={tenant}
+              room={room}
+              onClose={() => setIsConfirmModalOpen(false)}
+              onSuccess={() => {
+                setIsConfirmModalOpen(false);
+                loadTenantData(tenant.id);
+              }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // MODAL INTERAKTIF: UPLOAD BUKTI TF & DRAWING PAD TANDA TANGAN
+    function TenantConfirmModal({ bill, tenant, room, onClose, onSuccess }) {
+      const [selectedFile, setSelectedFile] = useState(null);
+      const [proofPreview, setProofPreview] = useState(bill.proof_url || null);
+      const [saving, setSaving] = useState(false);
+
+      // Canvas Tanda Tangan
+      const canvasRef = useRef(null);
+      const [isDrawing, setIsDrawing] = useState(false);
+      const [hasSignature, setHasSignature] = useState(false);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#38bdf8'; // Sky blue stroke
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+      }, []);
+
+      const getCoordinates = (e) => {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+          x: clientX - rect.left,
+          y: clientY - rect.top
+        };
+      };
+
+      const startDrawing = (e) => {
+        e.preventDefault();
+        setIsDrawing(true);
+        const { x, y } = getCoordinates(e);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      };
+
+      const draw = (e) => {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const { x, y } = getCoordinates(e);
+        const ctx = canvasRef.current.getContext('2d');
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        setHasSignature(true);
+      };
+
+      const stopDrawing = () => {
+        setIsDrawing(false);
+      };
+
+      const clearSignature = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        setHasSignature(false);
+      };
+
+      const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setSelectedFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setProofPreview(reader.result);
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+          let finalProofUrl = bill.proof_url;
+          let finalSignatureUrl = bill.signature_url;
+
+          // 1. Proses Upload Gambar Struk TF
+          if (selectedFile) {
+            try {
+              const fileExt = selectedFile.name.split('.').pop();
+              const fileName = `tf_${tenant.id}_${Date.now()}.${fileExt}`;
+              const { data: uploadData, error: uploadErr } = await db.storage
+                .from('receipts')
+                .upload(fileName, selectedFile, { upsert: true });
+
+              if (!uploadErr && uploadData) {
+                const { data: urlData } = db.storage.from('receipts').getPublicUrl(fileName);
+                finalProofUrl = urlData.publicUrl;
+              } else {
+                finalProofUrl = proofPreview;
+              }
+            } catch (err) {
+              finalProofUrl = proofPreview;
+            }
+          }
+
+          // 2. Ekstrak Data Gambar Tanda Tangan Canvas
+          if (hasSignature && canvasRef.current) {
+            finalSignatureUrl = canvasRef.current.toDataURL('image/png');
+          }
+
+          // 3. Simpan ke database
+          await db.from('bills').update({
+            proof_url: finalProofUrl,
+            signature_url: finalSignatureUrl,
+            payment_method: 'transfer'
+          }).eq('id', bill.id);
+
+          // 4. Buka WhatsApp konfirmasi otomatis ke Pengelola
+          const total = Number(bill.rent_amount || 0) + Number(bill.electric_cost || 0) + Number(bill.water_cost || 0) + Number(bill.waste_cost || 0) + Number(bill.extra_guest_cost || 0);
+          const text = `Halo Pengelola Plawa Kost, saya *${tenant.full_name}* (Kamar *${room?.room_number}*) telah membubuhkan tanda tangan & mengunggah bukti transfer sebesar *Rp ${total.toLocaleString('id-ID')}*. Mohon dicek ya kak, terima kasih! 🙏`;
+          window.open(`https://wa.me/${KOST_PAYMENT_INFO.ownerWa}?text=${encodeURIComponent(text)}`, '_blank');
+
+          alert('Konfirmasi bukti transfer & tanda tangan berhasil disimpan!');
+          onSuccess();
+        } catch (err) {
+          alert('Gagal menyimpan: ' + err.message);
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl my-6 space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="text-sm font-bold text-slate-100">Upload Bukti & Tanda Tangan</h3>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-sm">✕</button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* BAGIAN 1: UPLOAD BUKTI TRANSFER */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-sky-400 block">
+                  1. Foto / Struk Bukti Transfer (Transfer Bank / QRIS)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-bold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                />
+
+                {proofPreview && (
+                  <div className="relative border border-slate-800 rounded-xl overflow-hidden max-h-32 flex items-center justify-center bg-slate-950">
+                    <img src={proofPreview} alt="Preview Bukti" className="object-contain max-h-32 w-full" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setProofPreview(null);
+                      }}
+                      className="absolute top-1 right-1 bg-slate-950/80 text-rose-400 text-[10px] px-1.5 py-0.5 rounded"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* BAGIAN 2: PAD TANDA TANGAN DIGITAL (CANVAS SENTUH) */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-bold text-emerald-400">
+                    2. Bubuhkan Paraf / Tanda Tangan (Gores di layar)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={clearSignature}
+                    className="text-[10px] text-rose-400 hover:underline"
+                  >
+                    Hapus Ulang
+                  </button>
+                </div>
+
+                <div className="border border-slate-700 bg-slate-950 rounded-2xl overflow-hidden touch-none flex justify-center">
+                  <canvas
+                    ref={canvasRef}
+                    width={320}
+                    height={130}
+                    style={{ touchAction: 'none' }}
+                    onPointerDown={startDrawing}
+                    onPointerMove={draw}
+                    onPointerUp={stopDrawing}
+                    onPointerCancel={stopDrawing}
+                    className="cursor-crosshair w-full"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 italic text-center">Gunakan jari atau stylus Anda di atas kotak hitam.</p>
+              </div>
+
+              {/* Tombol Simpan & Kirim */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-slate-200"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow-md shadow-emerald-950"
+                >
+                  {saving ? 'Menyimpan...' : 'Simpan & Kirim Konfirmasi'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       );
     }
